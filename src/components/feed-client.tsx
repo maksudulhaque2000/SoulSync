@@ -1,0 +1,610 @@
+"use client";
+
+import imageCompression from "browser-image-compression";
+import { EditorContent, useEditor } from "@tiptap/react";
+import Placeholder from "@tiptap/extension-placeholder";
+import StarterKit from "@tiptap/starter-kit";
+import TiptapImage from "@tiptap/extension-image";
+import { formatDistanceToNow } from "date-fns";
+import { Copy, FileText, HandHeart, Heart, ImagePlus, Lightbulb, MessageCircle, PartyPopper, Send, Share2, ThumbsUp, Upload, UserPlus, X } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import Image from "next/image";
+import { type ChangeEvent, useEffect, useMemo, useState } from "react";
+import toast from "react-hot-toast";
+
+import { playActionSound } from "@/components/sound";
+
+type Media = {
+  url: string;
+  type: "image" | "pdf";
+  width?: number;
+  height?: number;
+  name?: string;
+};
+
+type Post = {
+  _id: string;
+  content: string;
+  media: Media[];
+  reactions: { user: { _id: string }; type: string }[];
+  comments: {
+    user: { _id: string; firstName: string; lastName: string };
+    text: string;
+    createdAt: string;
+  }[];
+  author: { _id: string; firstName: string; lastName: string; avatar?: string };
+  createdAt: string;
+};
+
+type SuggestedUser = {
+  _id: string;
+  firstName: string;
+  lastName: string;
+  bio?: string;
+};
+
+const reactionOptions = [
+  { type: "love", label: "Love", icon: Heart, color: "text-rose-300" },
+  { type: "care", label: "Care", icon: HandHeart, color: "text-amber-300" },
+  { type: "celebrate", label: "Celebrate", icon: PartyPopper, color: "text-cyan-300" },
+  { type: "insightful", label: "Insightful", icon: Lightbulb, color: "text-violet-300" },
+  { type: "support", label: "Support", icon: ThumbsUp, color: "text-emerald-300" },
+] as const;
+
+function imageGridClass(total: number) {
+  if (total <= 1) return "grid-cols-1";
+  if (total === 2) return "grid-cols-2";
+  if (total === 3) return "grid-cols-3";
+  return "grid-cols-2 md:grid-cols-3";
+}
+
+function htmlToText(html: string) {
+  return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+}
+
+type Props = {
+  initialPosts: Post[];
+  suggestedUsers: SuggestedUser[];
+  currentUserId: string;
+};
+
+export default function FeedClient({ initialPosts, suggestedUsers, currentUserId }: Props) {
+  const [posts, setPosts] = useState(initialPosts);
+  const [uploading, setUploading] = useState(false);
+  const [attachments, setAttachments] = useState<Media[]>([]);
+  const [resizePx, setResizePx] = useState(1600);
+  const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
+  const [openReactionPostId, setOpenReactionPostId] = useState<string | null>(null);
+  const [openCommentPostId, setOpenCommentPostId] = useState<string | null>(null);
+  const [openSharePostId, setOpenSharePostId] = useState<string | null>(null);
+
+  const editor = useEditor({
+    immediatelyRender: false,
+    extensions: [
+      StarterKit,
+      TiptapImage,
+      Placeholder.configure({ placeholder: "Write your deep thought, poem, or reflection..." }),
+    ],
+    content: "",
+    editorProps: {
+      attributes: {
+        className:
+          "min-h-[150px] rounded-xl border border-slate-700 bg-slate-950/80 p-4 text-slate-100 outline-none",
+      } as unknown as Record<string, string>,
+    },
+  });
+
+  const canPublish = useMemo(() => {
+    const text = editor?.getText().trim() ?? "";
+    return Boolean(text.length || attachments.length);
+  }, [attachments.length, editor]);
+
+  const activeSharePost = useMemo(
+    () => posts.find((post) => post._id === openSharePostId) ?? null,
+    [openSharePostId, posts]
+  );
+
+  const activeShareLink = useMemo(
+    () =>
+      openSharePostId && typeof window !== "undefined"
+        ? `${window.location.origin}/feed?post=${openSharePostId}`
+        : "",
+    [openSharePostId]
+  );
+
+  const activeSharePreview = useMemo(() => {
+    if (!activeSharePost) return "";
+    const text = htmlToText(activeSharePost.content);
+    return text.length > 140 ? `${text.slice(0, 140)}...` : text;
+  }, [activeSharePost]);
+
+  useEffect(() => {
+    if (!openSharePostId) return;
+
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpenSharePostId(null);
+      }
+    };
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", onEscape);
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      document.removeEventListener("keydown", onEscape);
+    };
+  }, [openSharePostId]);
+
+  const reloadPosts = async () => {
+    const refresh = await fetch("/api/posts", { cache: "no-store" });
+    const data = await refresh.json();
+    setPosts(data.posts ?? []);
+  };
+
+  const uploadAsset = async (file: File) => {
+    const body = new FormData();
+    body.append("file", file);
+
+    const res = await fetch("/api/upload", {
+      method: "POST",
+      body,
+    });
+
+    if (!res.ok) throw new Error("Upload failed");
+    return res.json();
+  };
+
+  const onPickImage = async (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []);
+    if (!files.length) return;
+
+    try {
+      setUploading(true);
+      const uploaded: Media[] = [];
+
+      for (const file of files) {
+        const compressed = await imageCompression(file, {
+          maxSizeMB: 1.6,
+          maxWidthOrHeight: resizePx,
+          useWebWorker: true,
+        });
+
+        const result = await uploadAsset(compressed as File);
+        uploaded.push({ url: result.url, type: "image", name: result.name });
+      }
+
+      setAttachments((prev) => [...prev, ...uploaded]);
+      toast.success("Image uploaded");
+      playActionSound("success");
+    } catch {
+      toast.error("Image upload failed");
+    } finally {
+      setUploading(false);
+      event.target.value = "";
+    }
+  };
+
+  const onPickPdf = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setUploading(true);
+      const result = await uploadAsset(file);
+      setAttachments((prev) => [...prev, { url: result.url, type: "pdf", name: result.name }]);
+      toast.success("PDF uploaded");
+      playActionSound("success");
+    } catch {
+      toast.error("PDF upload failed");
+    } finally {
+      setUploading(false);
+      event.target.value = "";
+    }
+  };
+
+  const publishPost = async () => {
+    if (!editor || !canPublish) return;
+
+    const res = await fetch("/api/posts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: editor.getHTML(), media: attachments }),
+    });
+
+    if (!res.ok) {
+      toast.error("Post publish failed");
+      return;
+    }
+
+    editor.commands.clearContent();
+    setAttachments([]);
+    await reloadPosts();
+
+    toast.success("Thought published");
+    playActionSound("success");
+  };
+
+  const reactToPost = async (postId: string, type: string) => {
+    const res = await fetch(`/api/posts/${postId}/react`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type }),
+    });
+
+    if (!res.ok) {
+      toast.error("Reaction failed");
+      return;
+    }
+
+    await reloadPosts();
+    playActionSound("react");
+  };
+
+  const commentOnPost = async (postId: string) => {
+    const text = commentDrafts[postId]?.trim();
+    if (!text) return;
+
+    const res = await fetch(`/api/posts/${postId}/comment`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+
+    if (!res.ok) {
+      toast.error("Comment failed");
+      return;
+    }
+
+    setCommentDrafts((prev) => ({ ...prev, [postId]: "" }));
+    await reloadPosts();
+    toast.success("Comment added");
+  };
+
+  const sharePost = async (postId: string) => {
+    const link = `${window.location.origin}/feed?post=${postId}`;
+
+    await navigator.clipboard.writeText(link);
+    toast.success("Post link copied");
+    setOpenSharePostId(null);
+  };
+
+  const shareToPlatform = (postId: string, platform: "facebook" | "linkedin" | "x" | "whatsapp") => {
+    const link = `${window.location.origin}/feed?post=${postId}`;
+    const encodedUrl = encodeURIComponent(link);
+    const encodedText = encodeURIComponent("Read this SoulSync post");
+
+    let targetUrl = "";
+    if (platform === "facebook") {
+      targetUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`;
+    }
+    if (platform === "linkedin") {
+      targetUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${encodedUrl}`;
+    }
+    if (platform === "x") {
+      targetUrl = `https://twitter.com/intent/tweet?url=${encodedUrl}&text=${encodedText}`;
+    }
+    if (platform === "whatsapp") {
+      targetUrl = `https://wa.me/?text=${encodedText}%20${encodedUrl}`;
+    }
+
+    if (targetUrl) {
+      window.open(targetUrl, "_blank", "noopener,noreferrer");
+    }
+
+    setOpenSharePostId(null);
+  };
+
+  const nativeSharePost = async (postId: string) => {
+    const link = `${window.location.origin}/feed?post=${postId}`;
+    if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+      try {
+        await navigator.share({ title: "SoulSync Post", text: "Read this SoulSync post", url: link });
+        setOpenSharePostId(null);
+        return;
+      } catch {
+        // ignored
+      }
+    }
+
+    await sharePost(postId);
+  };
+
+  const sendConnection = async (targetUserId: string) => {
+    const res = await fetch("/api/connection/request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ targetUserId }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      toast.error(data.error ?? "Connection request failed");
+      return;
+    }
+
+    toast.success("Connection request sent");
+    playActionSound("notification");
+  };
+
+  return (
+    <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-5 px-4 py-6 lg:grid-cols-[1.5fr_0.8fr]">
+      <section className="space-y-5">
+        <motion.article initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="card-panel">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="font-display text-2xl">Compose New Story</h2>
+            <span className="text-xs text-slate-400">Deep editor + image resize + pdf</span>
+          </div>
+
+          <EditorContent editor={editor} className="tiptap-shell" />
+
+          <div className="mt-4 grid grid-cols-1 gap-3 rounded-xl border border-slate-700/60 bg-slate-900/40 p-3 md:grid-cols-3">
+            <label className="rounded-lg border border-slate-700/70 p-2 text-sm text-slate-300">
+              Image resize width: {resizePx}px
+              <input type="range" min={900} max={2400} step={100} value={resizePx} onChange={(e) => setResizePx(Number(e.target.value))} className="mt-2 w-full" />
+            </label>
+
+            <label className="upload-btn">
+              <ImagePlus className="h-4 w-4" />
+              Upload image(s)
+              <input type="file" className="hidden" multiple accept="image/*" onChange={onPickImage} />
+            </label>
+
+            <label className="upload-btn">
+              <FileText className="h-4 w-4" />
+              Upload PDF
+              <input type="file" className="hidden" accept="application/pdf" onChange={onPickPdf} />
+            </label>
+          </div>
+
+          {attachments.length > 0 ? (
+            <div className="mt-4 space-y-3 rounded-xl border border-slate-700/60 bg-slate-900/30 p-3">
+              <p className="text-sm text-slate-300">Pending attachments</p>
+              <div className={`grid gap-2 ${imageGridClass(attachments.filter((m) => m.type === "image").length)}`}>
+                {attachments
+                  .filter((m) => m.type === "image")
+                  .map((m) => (
+                    <Image
+                      key={m.url}
+                      src={m.url}
+                      alt={m.name ?? "image"}
+                      width={1200}
+                      height={800}
+                      unoptimized
+                      className="h-auto max-h-72 w-full rounded-lg bg-slate-950/70 object-contain"
+                    />
+                  ))}
+              </div>
+              {attachments
+                .filter((m) => m.type === "pdf")
+                .map((m) => (
+                  <a key={m.url} href={m.url} target="_blank" className="inline-flex items-center gap-2 rounded-lg border border-slate-600 px-3 py-1.5 text-sm hover:bg-slate-800">
+                    <FileText className="h-4 w-4" />
+                    {m.name ?? "PDF"}
+                  </a>
+                ))}
+            </div>
+          ) : null}
+
+          <button className="auth-button mt-4" type="button" disabled={!canPublish || uploading} onClick={publishPost}>
+            <Upload className="mr-1 inline h-4 w-4" />
+            {uploading ? "Uploading..." : "Publish Post"}
+          </button>
+        </motion.article>
+
+        {posts.map((post, i) => {
+          const myReaction = post.reactions.find((r) => r.user?._id === currentUserId)?.type;
+          return (
+            <motion.article key={post._id} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} className="card-panel">
+              <div className="mb-3 flex items-center justify-between text-sm text-slate-300">
+                <p>{post.author.firstName} {post.author.lastName}</p>
+                <p>{formatDistanceToNow(new Date(post.createdAt), { addSuffix: true })}</p>
+              </div>
+
+              <div className="prose prose-invert max-w-none prose-p:text-slate-200" dangerouslySetInnerHTML={{ __html: post.content }} />
+
+              {post.media?.length ? (
+                <div className="mt-4 space-y-2">
+                  <div className={`grid gap-2 ${imageGridClass(post.media.filter((m) => m.type === "image").length)}`}>
+                    {post.media
+                      .filter((m) => m.type === "image")
+                      .map((media) => (
+                        <Image
+                          key={media.url}
+                          src={media.url}
+                          alt={media.name ?? "post image"}
+                          width={1400}
+                          height={900}
+                          unoptimized
+                          className="h-auto max-h-[34rem] w-full rounded-xl bg-slate-950/70 object-contain"
+                        />
+                      ))}
+                  </div>
+                  {post.media.filter((m) => m.type === "pdf").map((media) => (
+                    <a key={media.url} href={media.url} target="_blank" className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-1.5 text-sm hover:bg-slate-800">
+                      <FileText className="h-4 w-4" />
+                      {media.name ?? "PDF attachment"}
+                    </a>
+                  ))}
+                </div>
+              ) : null}
+
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <div
+                  className="relative"
+                  onMouseEnter={() => setOpenReactionPostId(post._id)}
+                  onMouseLeave={() => setOpenReactionPostId((prev) => (prev === post._id ? null : prev))}
+                >
+                  <button className="icon-btn"><Heart className="h-4 w-4" />{myReaction ? `Reacted: ${myReaction}` : "React"}</button>
+                  <AnimatePresence>
+                    {openReactionPostId === post._id ? (
+                      <motion.div
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 8 }}
+                        transition={{ duration: 0.2 }}
+                        className="absolute bottom-full left-0 z-20 mb-2 flex items-center gap-2"
+                      >
+                        {reactionOptions.map((item, index) => {
+                          const Icon = item.icon;
+                          return (
+                            <motion.button
+                              key={item.type}
+                              type="button"
+                              initial={{ opacity: 0, y: 10, scale: 0.85 }}
+                              animate={{ opacity: 1, y: 0, scale: 1 }}
+                              exit={{ opacity: 0, y: 10, scale: 0.85 }}
+                              transition={{ duration: 0.22, delay: index * 0.06 }}
+                              title={item.label}
+                              className="rounded-full border border-slate-700 bg-slate-900/95 p-2.5 shadow-lg transition hover:-translate-y-1 hover:scale-110 hover:bg-slate-800"
+                              onClick={() => reactToPost(post._id, item.type)}
+                            >
+                              <Icon className={`h-4 w-4 ${item.color}`} />
+                            </motion.button>
+                          );
+                        })}
+                      </motion.div>
+                    ) : null}
+                  </AnimatePresence>
+                </div>
+
+                <button
+                  className="icon-btn"
+                  onClick={() => setOpenCommentPostId((prev) => (prev === post._id ? null : post._id))}
+                  type="button"
+                >
+                  <MessageCircle className="h-4 w-4" />
+                  {post.comments.length} Comments
+                </button>
+
+                <button
+                  className="icon-btn"
+                  onClick={() => setOpenSharePostId((prev) => (prev === post._id ? null : post._id))}
+                  type="button"
+                >
+                  <Share2 className="h-4 w-4" />
+                  Share
+                </button>
+              </div>
+
+              {openCommentPostId === post._id ? (
+                <div className="mt-3 flex gap-2">
+                  <input value={commentDrafts[post._id] ?? ""} onChange={(e) => setCommentDrafts((prev) => ({ ...prev, [post._id]: e.target.value }))} placeholder="Write a thoughtful comment" className="auth-input h-10 flex-1" />
+                  <button className="icon-btn" onClick={() => commentOnPost(post._id)} type="button"><Send className="h-4 w-4" /></button>
+                </div>
+              ) : null}
+
+              {post.comments.length > 0 ? (
+                <div className="mt-3 space-y-2">
+                  {post.comments.slice(-3).map((c, idx) => (
+                    <p key={`${post._id}-comment-${idx}`} className="text-sm text-slate-300">
+                      <span className="font-semibold text-slate-200">{c.user.firstName} {c.user.lastName}</span> {c.text}
+                    </p>
+                  ))}
+                </div>
+              ) : null}
+            </motion.article>
+          );
+        })}
+      </section>
+
+      <aside className="space-y-5">
+        <div className="card-panel">
+          <h3 className="font-display text-xl">People You May Connect</h3>
+          <div className="mt-3 space-y-2">
+            {suggestedUsers.map((user) => (
+              <div key={user._id} className="rounded-xl border border-slate-700/70 bg-slate-900/40 p-3">
+                <p className="font-medium text-slate-200">{user.firstName} {user.lastName}</p>
+                <p className="line-clamp-2 text-xs text-slate-400">{user.bio || "A meaningful SoulSync member."}</p>
+                <button className="mt-2 inline-flex items-center gap-1 rounded-lg border border-cyan-500/50 px-2.5 py-1 text-xs text-cyan-200 hover:bg-cyan-600/10" onClick={() => sendConnection(user._id)} type="button">
+                  <UserPlus className="h-3.5 w-3.5" />
+                  Request Connection
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </aside>
+
+      <AnimatePresence>
+        {openSharePostId ? (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm"
+            onClick={() => setOpenSharePostId(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 16, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.98 }}
+              transition={{ duration: 0.2 }}
+              className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900/95 p-4 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="mb-3 flex items-center justify-between">
+                <h4 className="font-display text-xl text-slate-100">Share This Post</h4>
+                <button
+                  className="rounded-lg border border-slate-700 p-2 text-slate-300 hover:bg-slate-800"
+                  type="button"
+                  onClick={() => setOpenSharePostId(null)}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <p className="mb-4 text-sm text-slate-400">
+                Choose where you want to share this story.
+              </p>
+
+              <div className="mb-4 rounded-xl border border-slate-700 bg-slate-950/70 p-3">
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Link Preview</p>
+                <p className="mt-2 line-clamp-3 text-sm text-slate-200">
+                  {activeSharePreview || "A new SoulSync story is waiting for you."}
+                </p>
+              </div>
+
+              <div className="mb-4 rounded-xl border border-slate-700 bg-slate-950/70 p-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    className="h-10 flex-1 rounded-lg border border-slate-700 bg-slate-900 px-3 text-xs text-slate-300 outline-none"
+                    readOnly
+                    value={activeShareLink}
+                  />
+                  <button
+                    className="inline-flex h-10 items-center gap-1 rounded-lg border border-cyan-500/40 bg-cyan-500/15 px-3 text-xs text-cyan-100 hover:bg-cyan-500/25"
+                    type="button"
+                    onClick={() => openSharePostId && void sharePost(openSharePostId)}
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                    Copy
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  className="rounded-xl border border-slate-700 px-3 py-3 text-sm text-slate-200 transition hover:bg-slate-800"
+                  type="button"
+                  onClick={() => void sharePost(openSharePostId)}
+                >
+                  <Copy className="mr-1 inline h-4 w-4" />
+                  Copy Link
+                </button>
+                <button className="rounded-xl border border-slate-700 px-3 py-3 text-sm text-slate-200 transition hover:bg-slate-800" type="button" onClick={() => shareToPlatform(openSharePostId, "facebook")}>Share to Facebook</button>
+                <button className="rounded-xl border border-slate-700 px-3 py-3 text-sm text-slate-200 transition hover:bg-slate-800" type="button" onClick={() => shareToPlatform(openSharePostId, "linkedin")}>Share to LinkedIn</button>
+                <button className="rounded-xl border border-slate-700 px-3 py-3 text-sm text-slate-200 transition hover:bg-slate-800" type="button" onClick={() => shareToPlatform(openSharePostId, "x")}>Share to X</button>
+                <button className="rounded-xl border border-slate-700 px-3 py-3 text-sm text-slate-200 transition hover:bg-slate-800" type="button" onClick={() => shareToPlatform(openSharePostId, "whatsapp")}>Share to WhatsApp</button>
+                <button className="rounded-xl border border-slate-700 px-3 py-3 text-sm text-slate-200 transition hover:bg-slate-800" type="button" onClick={() => void nativeSharePost(openSharePostId)}>
+                  Native Share
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+    </div>
+  );
+}
