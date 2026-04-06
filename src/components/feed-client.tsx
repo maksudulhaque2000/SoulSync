@@ -6,7 +6,7 @@ import Placeholder from "@tiptap/extension-placeholder";
 import StarterKit from "@tiptap/starter-kit";
 import TiptapImage from "@tiptap/extension-image";
 import { formatDistanceToNow } from "date-fns";
-import { Copy, FileText, HandHeart, Heart, ImagePlus, Lightbulb, MessageCircle, PartyPopper, Send, Share2, ThumbsUp, Upload, UserPlus, X } from "lucide-react";
+import { CheckCircle2, Copy, FileText, HandHeart, Heart, ImagePlus, Lightbulb, MessageCircle, PartyPopper, Send, Share2, Sparkles, ThumbsUp, Upload, UserPlus, X } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import Image from "next/image";
 import { type ChangeEvent, useEffect, useMemo, useState } from "react";
@@ -20,6 +20,7 @@ type Media = {
   width?: number;
   height?: number;
   name?: string;
+  file?: File;
 };
 
 type Post = {
@@ -73,10 +74,18 @@ export default function FeedClient({ initialPosts, suggestedUsers, currentUserId
   const [uploading, setUploading] = useState(false);
   const [attachments, setAttachments] = useState<Media[]>([]);
   const [resizePx, setResizePx] = useState(1600);
+  const [activeImageEditorIndex, setActiveImageEditorIndex] = useState<number | null>(null);
+  const [editorText, setEditorText] = useState("");
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
   const [openReactionPostId, setOpenReactionPostId] = useState<string | null>(null);
   const [openCommentPostId, setOpenCommentPostId] = useState<string | null>(null);
   const [openSharePostId, setOpenSharePostId] = useState<string | null>(null);
+  const [openComposeModal, setOpenComposeModal] = useState(false);
+
+  const indexedAttachments = useMemo(
+    () => attachments.map((attachment, index) => ({ ...attachment, index })),
+    [attachments]
+  );
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -86,6 +95,7 @@ export default function FeedClient({ initialPosts, suggestedUsers, currentUserId
       Placeholder.configure({ placeholder: "Write your deep thought, poem, or reflection..." }),
     ],
     content: "",
+    onUpdate: ({ editor: currentEditor }) => setEditorText(currentEditor.getText()),
     editorProps: {
       attributes: {
         className:
@@ -95,9 +105,14 @@ export default function FeedClient({ initialPosts, suggestedUsers, currentUserId
   });
 
   const canPublish = useMemo(() => {
-    const text = editor?.getText().trim() ?? "";
+    const text = editorText.trim();
     return Boolean(text.length || attachments.length);
-  }, [attachments.length, editor]);
+  }, [attachments.length, editorText]);
+
+  const hasImageAttachments = useMemo(
+    () => attachments.some((attachment) => attachment.type === "image"),
+    [attachments]
+  );
 
   const activeSharePost = useMemo(
     () => posts.find((post) => post._id === openSharePostId) ?? null,
@@ -119,10 +134,16 @@ export default function FeedClient({ initialPosts, suggestedUsers, currentUserId
   }, [activeSharePost]);
 
   useEffect(() => {
-    if (!openSharePostId) return;
+    const hasModalOpen = Boolean(openSharePostId || openComposeModal);
+    if (!hasModalOpen) return;
 
     const onEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (event.key !== "Escape") return;
+      if (openComposeModal) {
+        setOpenComposeModal(false);
+        return;
+      }
+      if (openSharePostId) {
         setOpenSharePostId(null);
       }
     };
@@ -135,7 +156,7 @@ export default function FeedClient({ initialPosts, suggestedUsers, currentUserId
       document.body.style.overflow = originalOverflow;
       document.removeEventListener("keydown", onEscape);
     };
-  }, [openSharePostId]);
+  }, [openComposeModal, openSharePostId]);
 
   const reloadPosts = async () => {
     const refresh = await fetch("/api/posts", { cache: "no-store" });
@@ -161,29 +182,26 @@ export default function FeedClient({ initialPosts, suggestedUsers, currentUserId
     if (!files.length) return;
 
     try {
-      setUploading(true);
-      const uploaded: Media[] = [];
+      const draftImages: Media[] = files.map((file) => ({
+        url: URL.createObjectURL(file),
+        type: "image",
+        name: file.name,
+        file,
+      }));
 
-      for (const file of files) {
-        const compressed = await imageCompression(file, {
-          maxSizeMB: 1.6,
-          maxWidthOrHeight: resizePx,
-          useWebWorker: true,
-        });
-
-        const result = await uploadAsset(compressed as File);
-        uploaded.push({ url: result.url, type: "image", name: result.name });
-      }
-
-      setAttachments((prev) => [...prev, ...uploaded]);
-      toast.success("Image uploaded");
+      setAttachments((prev) => {
+        if (activeImageEditorIndex === null) {
+          setActiveImageEditorIndex(prev.length);
+        }
+        return [...prev, ...draftImages];
+      });
+      toast.success("Image added. You can now resize manually.");
       playActionSound("success");
     } catch {
-      toast.error("Image upload failed");
-    } finally {
-      setUploading(false);
-      event.target.value = "";
+      toast.error("Image add failed");
     }
+
+    event.target.value = "";
   };
 
   const onPickPdf = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -207,23 +225,110 @@ export default function FeedClient({ initialPosts, suggestedUsers, currentUserId
   const publishPost = async () => {
     if (!editor || !canPublish) return;
 
-    const res = await fetch("/api/posts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content: editor.getHTML(), media: attachments }),
-    });
+    setUploading(true);
 
-    if (!res.ok) {
-      toast.error("Post publish failed");
-      return;
+    try {
+      const mediaPayload: Media[] = [];
+
+      for (const attachment of attachments) {
+        if (attachment.type === "pdf") {
+          mediaPayload.push({
+            url: attachment.url,
+            type: "pdf",
+            name: attachment.name,
+          });
+          continue;
+        }
+
+        if (!attachment.file) continue;
+
+        const result = await uploadAsset(attachment.file);
+        mediaPayload.push({
+          url: result.url,
+          type: "image",
+          name: result.name,
+        });
+      }
+
+      const res = await fetch("/api/posts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: editor.getHTML(), media: mediaPayload }),
+      });
+
+      if (!res.ok) {
+        toast.error("Post publish failed");
+        return;
+      }
+
+      attachments.forEach((attachment) => {
+        if (attachment.type === "image" && attachment.url.startsWith("blob:")) {
+          URL.revokeObjectURL(attachment.url);
+        }
+      });
+
+      editor.commands.clearContent();
+      setAttachments([]);
+      setOpenComposeModal(false);
+      setActiveImageEditorIndex(null);
+      await reloadPosts();
+
+      toast.success("Thought published");
+      playActionSound("success");
+    } finally {
+      setUploading(false);
     }
+  };
 
-    editor.commands.clearContent();
-    setAttachments([]);
-    await reloadPosts();
+  const removeAttachment = (index: number) => {
+    setAttachments((prev) => {
+      const target = prev[index];
+      if (target?.type === "image" && target.url.startsWith("blob:")) {
+        URL.revokeObjectURL(target.url);
+      }
+      return prev.filter((_, itemIndex) => itemIndex !== index);
+    });
+    setActiveImageEditorIndex((prev) => (prev === index ? null : prev));
+  };
 
-    toast.success("Thought published");
-    playActionSound("success");
+  const applyImageResize = async (index: number) => {
+    const target = attachments[index];
+    if (!target || target.type !== "image" || !target.file) return;
+
+    try {
+      setUploading(true);
+      const resized = await imageCompression(target.file, {
+        maxSizeMB: 1.6,
+        maxWidthOrHeight: resizePx,
+        useWebWorker: true,
+      });
+
+      const resizedFile = new File([resized], target.file.name, { type: resized.type || target.file.type });
+      const nextUrl = URL.createObjectURL(resizedFile);
+
+      setAttachments((prev) => {
+        const current = prev[index];
+        if (!current || current.type !== "image") return prev;
+        if (current.url.startsWith("blob:")) {
+          URL.revokeObjectURL(current.url);
+        }
+
+        const next = [...prev];
+        next[index] = {
+          ...current,
+          url: nextUrl,
+          file: resizedFile,
+          width: resizePx,
+        };
+        return next;
+      });
+
+      toast.success("Image resized");
+    } catch {
+      toast.error("Image resize failed");
+    } finally {
+      setUploading(false);
+    }
   };
 
   const reactToPost = async (postId: string, type: string) => {
@@ -331,67 +436,28 @@ export default function FeedClient({ initialPosts, suggestedUsers, currentUserId
   return (
     <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-5 px-4 py-6 lg:grid-cols-[1.5fr_0.8fr]">
       <section className="space-y-5">
-        <motion.article initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="card-panel">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-display text-2xl">Compose New Story</h2>
-            <span className="text-xs text-slate-400">Deep editor + image resize + pdf</span>
-          </div>
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+          <button
+            type="button"
+            onClick={() => setOpenComposeModal(true)}
+            className="group relative w-full overflow-hidden rounded-2xl border border-cyan-400/35 bg-slate-900/70 p-5 text-left shadow-[0_0_0_1px_rgba(34,211,238,0.12),0_18px_44px_rgba(2,132,199,0.24)] transition hover:-translate-y-0.5 hover:border-cyan-300/60 hover:shadow-[0_0_0_1px_rgba(34,211,238,0.22),0_24px_52px_rgba(8,145,178,0.35)]"
+          >
+            <div className="pointer-events-none absolute -right-16 -top-16 h-44 w-44 rounded-full bg-cyan-400/20 blur-3xl transition group-hover:bg-cyan-300/30" />
+            <div className="pointer-events-none absolute -bottom-10 left-14 h-36 w-36 rounded-full bg-blue-500/20 blur-3xl" />
 
-          <EditorContent editor={editor} className="tiptap-shell" />
-
-          <div className="mt-4 grid grid-cols-1 gap-3 rounded-xl border border-slate-700/60 bg-slate-900/40 p-3 md:grid-cols-3">
-            <label className="rounded-lg border border-slate-700/70 p-2 text-sm text-slate-300">
-              Image resize width: {resizePx}px
-              <input type="range" min={900} max={2400} step={100} value={resizePx} onChange={(e) => setResizePx(Number(e.target.value))} className="mt-2 w-full" />
-            </label>
-
-            <label className="upload-btn">
-              <ImagePlus className="h-4 w-4" />
-              Upload image(s)
-              <input type="file" className="hidden" multiple accept="image/*" onChange={onPickImage} />
-            </label>
-
-            <label className="upload-btn">
-              <FileText className="h-4 w-4" />
-              Upload PDF
-              <input type="file" className="hidden" accept="application/pdf" onChange={onPickPdf} />
-            </label>
-          </div>
-
-          {attachments.length > 0 ? (
-            <div className="mt-4 space-y-3 rounded-xl border border-slate-700/60 bg-slate-900/30 p-3">
-              <p className="text-sm text-slate-300">Pending attachments</p>
-              <div className={`grid gap-2 ${imageGridClass(attachments.filter((m) => m.type === "image").length)}`}>
-                {attachments
-                  .filter((m) => m.type === "image")
-                  .map((m) => (
-                    <Image
-                      key={m.url}
-                      src={m.url}
-                      alt={m.name ?? "image"}
-                      width={1200}
-                      height={800}
-                      unoptimized
-                      className="h-auto max-h-72 w-full rounded-lg bg-slate-950/70 object-contain"
-                    />
-                  ))}
+            <div className="relative flex items-center justify-between gap-3">
+              <div>
+                <p className="mb-1 inline-flex items-center gap-1 rounded-full border border-cyan-400/30 bg-cyan-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-cyan-200">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Quick Composer
+                </p>
+                <h2 className="font-display text-2xl text-slate-100 md:text-3xl">Compose New Story</h2>
+                <p className="mt-1 text-sm text-slate-300">Click to open your writing studio in a focused popup.</p>
               </div>
-              {attachments
-                .filter((m) => m.type === "pdf")
-                .map((m) => (
-                  <a key={m.url} href={m.url} target="_blank" className="inline-flex items-center gap-2 rounded-lg border border-slate-600 px-3 py-1.5 text-sm hover:bg-slate-800">
-                    <FileText className="h-4 w-4" />
-                    {m.name ?? "PDF"}
-                  </a>
-                ))}
+              <span className="rounded-xl border border-cyan-400/30 bg-cyan-500/20 px-4 py-2 text-sm font-medium text-cyan-100">Open</span>
             </div>
-          ) : null}
-
-          <button className="auth-button mt-4" type="button" disabled={!canPublish || uploading} onClick={publishPost}>
-            <Upload className="mr-1 inline h-4 w-4" />
-            {uploading ? "Uploading..." : "Publish Post"}
           </button>
-        </motion.article>
+        </motion.div>
 
         {posts.map((post, i) => {
           const myReaction = post.reactions.find((r) => r.user?._id === currentUserId)?.type;
@@ -417,7 +483,7 @@ export default function FeedClient({ initialPosts, suggestedUsers, currentUserId
                           width={1400}
                           height={900}
                           unoptimized
-                          className="h-auto max-h-[34rem] w-full rounded-xl bg-slate-950/70 object-contain"
+                          className="h-auto max-h-136 w-full rounded-xl bg-slate-950/70 object-contain"
                         />
                       ))}
                   </div>
@@ -528,12 +594,189 @@ export default function FeedClient({ initialPosts, suggestedUsers, currentUserId
       </aside>
 
       <AnimatePresence>
+        {openComposeModal ? (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-90 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm"
+            onClick={() => setOpenComposeModal(false)}
+          >
+            <motion.article
+              initial={{ opacity: 0, y: 16, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.98 }}
+              transition={{ duration: 0.2 }}
+              className="card-panel relative max-h-[92vh] w-full max-w-4xl overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="pointer-events-none absolute -right-24 -top-28 h-64 w-64 rounded-full bg-cyan-500/10 blur-3xl" />
+              <div className="pointer-events-none absolute -bottom-28 left-12 h-64 w-64 rounded-full bg-blue-500/10 blur-3xl" />
+
+              <div className="relative mb-5 flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="mb-1 inline-flex items-center gap-1 rounded-full border border-cyan-400/30 bg-cyan-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.22em] text-cyan-200">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Publishing Studio
+                  </p>
+                  <h2 className="font-display text-2xl md:text-3xl">Compose New Story</h2>
+                  <p className="mt-1 text-sm text-slate-400">Write deeply, attach visuals, and publish with confidence.</p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <div className="inline-flex items-center gap-2 rounded-xl border border-slate-700/70 bg-slate-900/50 px-3 py-2 text-xs text-slate-300">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-300" />
+                    {attachments.length} attachment{attachments.length === 1 ? "" : "s"}
+                  </div>
+                  <button
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-700 bg-slate-900/70 text-slate-300 transition hover:bg-slate-800"
+                    type="button"
+                    onClick={() => setOpenComposeModal(false)}
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+
+              <EditorContent editor={editor} className="tiptap-shell" />
+
+              <div className="relative mt-4 grid grid-cols-1 gap-3 rounded-2xl border border-slate-700/60 bg-slate-900/35 p-3 md:grid-cols-2">
+                <label className="group flex h-full cursor-pointer flex-col justify-between rounded-xl border border-slate-700/80 bg-slate-950/40 p-3 transition hover:border-cyan-500/50 hover:bg-cyan-500/10">
+                  <div className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-600 bg-slate-900/80 text-cyan-200">
+                    <ImagePlus className="h-4 w-4" />
+                  </div>
+                  <div className="mt-3">
+                    <p className="font-medium text-slate-100">Upload image(s)</p>
+                    <p className="mt-1 text-xs text-slate-400">Auto-compressed with your resize setting</p>
+                  </div>
+                  <input type="file" className="hidden" multiple accept="image/*" onChange={onPickImage} />
+                </label>
+
+                <label className="group flex h-full cursor-pointer flex-col justify-between rounded-xl border border-slate-700/80 bg-slate-950/40 p-3 transition hover:border-cyan-500/50 hover:bg-cyan-500/10">
+                  <div className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-600 bg-slate-900/80 text-cyan-200">
+                    <FileText className="h-4 w-4" />
+                  </div>
+                  <div className="mt-3">
+                    <p className="font-medium text-slate-100">Upload PDF</p>
+                    <p className="mt-1 text-xs text-slate-400">Share notes, essays, or supporting docs</p>
+                  </div>
+                  <input type="file" className="hidden" accept="application/pdf" onChange={onPickPdf} />
+                </label>
+              </div>
+
+              {hasImageAttachments ? (
+                <div className="mt-4 rounded-2xl border border-slate-700/70 bg-slate-950/35 p-3">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Image Quality</p>
+                    <p className="text-xs text-slate-400">Visible only after adding image</p>
+                  </div>
+                  <p className="text-sm text-slate-200">Resize width: <span className="font-semibold text-cyan-200">{resizePx}px</span></p>
+                  <input
+                    type="range"
+                    min={900}
+                    max={2400}
+                    step={100}
+                    value={resizePx}
+                    onChange={(e) => setResizePx(Number(e.target.value))}
+                    className="mt-3 w-full accent-cyan-400"
+                  />
+                  <p className="mt-2 text-xs text-slate-400">Select an image below, then click Resize to apply manually.</p>
+                </div>
+              ) : null}
+
+              {attachments.length > 0 ? (
+                <div className="relative mt-4 space-y-3 rounded-2xl border border-slate-700/60 bg-slate-900/30 p-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-slate-200">Pending attachments</p>
+                    <p className="text-xs text-slate-400">{attachments.length} ready to publish</p>
+                  </div>
+
+                  <div className={`grid gap-2 ${imageGridClass(indexedAttachments.filter((m) => m.type === "image").length)}`}>
+                    {indexedAttachments
+                      .filter((m) => m.type === "image")
+                      .map((m) => (
+                        <div key={`${m.url}-${m.index}`} className="relative overflow-hidden rounded-xl border border-slate-700/70 bg-slate-950/70 p-1">
+                          <Image
+                            src={m.url}
+                            alt={m.name ?? "image"}
+                            width={1200}
+                            height={800}
+                            unoptimized
+                            className="h-auto max-h-72 w-full rounded-lg bg-slate-950/70 object-contain"
+                          />
+                          <button
+                            type="button"
+                            className="absolute right-3 top-3 inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-600 bg-slate-950/90 text-slate-200 transition hover:border-rose-400/60 hover:text-rose-200"
+                            onClick={() => removeAttachment(m.index)}
+                            aria-label="Remove image"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                          <div className="absolute bottom-3 left-3 flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setActiveImageEditorIndex(m.index)}
+                              className="rounded-lg border border-slate-600 bg-slate-950/90 px-2.5 py-1 text-xs text-slate-100 transition hover:border-cyan-500/60 hover:text-cyan-200"
+                            >
+                              Edit
+                            </button>
+                            {activeImageEditorIndex === m.index ? (
+                              <button
+                                type="button"
+                                onClick={() => void applyImageResize(m.index)}
+                                disabled={uploading}
+                                className="rounded-lg border border-cyan-500/50 bg-cyan-500/20 px-2.5 py-1 text-xs text-cyan-100 transition hover:bg-cyan-500/30 disabled:opacity-60"
+                              >
+                                Resize
+                              </button>
+                            ) : null}
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {indexedAttachments
+                      .filter((m) => m.type === "pdf")
+                      .map((m) => (
+                        <div key={`${m.url}-${m.index}`} className="inline-flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-950/60 px-3 py-2 text-sm text-slate-200">
+                          <a href={m.url} target="_blank" className="inline-flex items-center gap-2 hover:text-cyan-200">
+                            <FileText className="h-4 w-4" />
+                            {m.name ?? "PDF"}
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => removeAttachment(m.index)}
+                            className="inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-300 transition hover:bg-slate-800 hover:text-rose-200"
+                            aria-label="Remove PDF"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                <p className="text-xs text-slate-400">Tip: keep stories concise and visual for better engagement.</p>
+                <button className="auth-button" type="button" disabled={!canPublish || uploading} onClick={publishPost}>
+                  <Upload className="mr-1 inline h-4 w-4" />
+                  {uploading ? "Uploading..." : "Publish Post"}
+                </button>
+              </div>
+            </motion.article>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+
+      <AnimatePresence>
         {openSharePostId ? (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm"
+            className="fixed inset-0 z-90 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm"
             onClick={() => setOpenSharePostId(null)}
           >
             <motion.div
