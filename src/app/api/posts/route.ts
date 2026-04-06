@@ -8,6 +8,16 @@ import Post from "@/models/Post";
 
 const createPostSchema = z.object({
   content: z.string().max(20000).optional().default(""),
+  textStyle: z
+    .object({
+      backgroundColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional().default("#1e293b"),
+      textAlign: z.enum(["left", "center", "right"]).optional().default("left"),
+    })
+    .optional()
+    .default({
+      backgroundColor: "#1e293b",
+      textAlign: "left",
+    }),
   media: z
     .array(
       z.object({
@@ -52,6 +62,7 @@ export async function POST(req: Request) {
   const post = await Post.create({
     author: session.user.id,
     content: parsed.data.content,
+    textStyle: parsed.data.textStyle,
     media: parsed.data.media,
   });
 

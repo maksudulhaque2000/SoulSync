@@ -4,6 +4,14 @@ const postSchema = new Schema(
   {
     author: { type: Schema.Types.ObjectId, ref: "User", required: true },
     content: { type: String, default: "" },
+    textStyle: {
+      backgroundColor: { type: String, default: "#1e293b" },
+      textAlign: {
+        type: String,
+        enum: ["left", "center", "right"],
+        default: "left",
+      },
+    },
     media: [
       {
         url: { type: String, required: true },

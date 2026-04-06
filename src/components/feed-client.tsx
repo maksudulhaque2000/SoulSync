@@ -6,7 +6,7 @@ import Placeholder from "@tiptap/extension-placeholder";
 import StarterKit from "@tiptap/starter-kit";
 import TiptapImage from "@tiptap/extension-image";
 import { formatDistanceToNow } from "date-fns";
-import { CheckCircle2, Copy, FileText, HandHeart, Heart, ImagePlus, Lightbulb, MessageCircle, PartyPopper, Send, Share2, Sparkles, ThumbsUp, Upload, UserPlus, X } from "lucide-react";
+import { AlignCenter, AlignLeft, AlignRight, CheckCircle2, Copy, FileText, HandHeart, Heart, ImagePlus, Lightbulb, MessageCircle, PartyPopper, Send, Share2, Sparkles, ThumbsUp, Upload, UserPlus, X } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import Image from "next/image";
 import { type ChangeEvent, useEffect, useMemo, useState } from "react";
@@ -26,6 +26,10 @@ type Media = {
 type Post = {
   _id: string;
   content: string;
+  textStyle?: {
+    backgroundColor?: string;
+    textAlign?: "left" | "center" | "right";
+  };
   media: Media[];
   reactions: { user: { _id: string }; type: string }[];
   comments: {
@@ -51,6 +55,30 @@ const reactionOptions = [
   { type: "insightful", label: "Insightful", icon: Lightbulb, color: "text-violet-300" },
   { type: "support", label: "Support", icon: ThumbsUp, color: "text-emerald-300" },
 ] as const;
+
+const textAlignOptions = [
+  { value: "left", label: "Left", icon: AlignLeft },
+  { value: "center", label: "Center", icon: AlignCenter },
+  { value: "right", label: "Right", icon: AlignRight },
+] as const;
+
+const textBackgroundPresets = ["#0f172a", "#1e293b", "#14532d", "#0f766e", "#7f1d1d", "#581c87"];
+
+function normalizeHexColor(value: string | undefined) {
+  if (!value) return null;
+  return /^#[0-9a-fA-F]{6}$/.test(value) ? value : null;
+}
+
+function getReadableTextColor(hexColor: string) {
+  const normalized = normalizeHexColor(hexColor);
+  if (!normalized) return "#e2e8f0";
+
+  const r = Number.parseInt(normalized.slice(1, 3), 16);
+  const g = Number.parseInt(normalized.slice(3, 5), 16);
+  const b = Number.parseInt(normalized.slice(5, 7), 16);
+  const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+  return brightness > 160 ? "#0f172a" : "#e2e8f0";
+}
 
 function imageGridClass(total: number) {
   if (total <= 1) return "grid-cols-1";
@@ -81,6 +109,8 @@ export default function FeedClient({ initialPosts, suggestedUsers, currentUserId
   const [openCommentPostId, setOpenCommentPostId] = useState<string | null>(null);
   const [openSharePostId, setOpenSharePostId] = useState<string | null>(null);
   const [openComposeModal, setOpenComposeModal] = useState(false);
+  const [textBackgroundColor, setTextBackgroundColor] = useState("#1e293b");
+  const [textAlign, setTextAlign] = useState<"left" | "center" | "right">("left");
 
   const indexedAttachments = useMemo(
     () => attachments.map((attachment, index) => ({ ...attachment, index })),
@@ -99,7 +129,7 @@ export default function FeedClient({ initialPosts, suggestedUsers, currentUserId
     editorProps: {
       attributes: {
         className:
-          "min-h-[150px] rounded-xl border border-slate-700 bg-slate-950/80 p-4 text-slate-100 outline-none",
+          "min-h-[150px] rounded-xl border border-slate-700 p-4 outline-none",
       } as unknown as Record<string, string>,
     },
   });
@@ -253,7 +283,14 @@ export default function FeedClient({ initialPosts, suggestedUsers, currentUserId
       const res = await fetch("/api/posts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: editor.getHTML(), media: mediaPayload }),
+        body: JSON.stringify({
+          content: editor.getHTML(),
+          media: mediaPayload,
+          textStyle: {
+            backgroundColor: textBackgroundColor,
+            textAlign,
+          },
+        }),
       });
 
       if (!res.ok) {
@@ -271,6 +308,8 @@ export default function FeedClient({ initialPosts, suggestedUsers, currentUserId
       setAttachments([]);
       setOpenComposeModal(false);
       setActiveImageEditorIndex(null);
+      setTextBackgroundColor("#1e293b");
+      setTextAlign("left");
       await reloadPosts();
 
       toast.success("Thought published");
@@ -461,6 +500,10 @@ export default function FeedClient({ initialPosts, suggestedUsers, currentUserId
 
         {posts.map((post, i) => {
           const myReaction = post.reactions.find((r) => r.user?._id === currentUserId)?.type;
+          const postBackgroundColor = normalizeHexColor(post.textStyle?.backgroundColor) ?? "#1e293b";
+          const postTextAlign = post.textStyle?.textAlign ?? "left";
+          const postTextColor = getReadableTextColor(postBackgroundColor);
+
           return (
             <motion.article key={post._id} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} className="card-panel">
               <div className="mb-3 flex items-center justify-between text-sm text-slate-300">
@@ -468,7 +511,15 @@ export default function FeedClient({ initialPosts, suggestedUsers, currentUserId
                 <p>{formatDistanceToNow(new Date(post.createdAt), { addSuffix: true })}</p>
               </div>
 
-              <div className="prose prose-invert max-w-none prose-p:text-slate-200" dangerouslySetInnerHTML={{ __html: post.content }} />
+              <div
+                className="prose max-w-none rounded-xl px-4 py-3 shadow-inner **:text-inherit"
+                style={{
+                  backgroundColor: postBackgroundColor,
+                  color: postTextColor,
+                  textAlign: postTextAlign,
+                }}
+                dangerouslySetInnerHTML={{ __html: post.content }}
+              />
 
               {post.media?.length ? (
                 <div className="mt-4 space-y-2">
@@ -638,7 +689,64 @@ export default function FeedClient({ initialPosts, suggestedUsers, currentUserId
                 </div>
               </div>
 
-              <EditorContent editor={editor} className="tiptap-shell" />
+              <div
+                className="mt-4 rounded-xl"
+                style={{
+                  backgroundColor: textBackgroundColor,
+                  color: getReadableTextColor(textBackgroundColor),
+                }}
+              >
+                <EditorContent editor={editor} className="tiptap-shell" />
+              </div>
+
+              <div className="mt-4 rounded-2xl border border-slate-700/60 bg-slate-900/35 p-3">
+                <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Text Style</p>
+
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  {textBackgroundPresets.map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setTextBackgroundColor(preset)}
+                      className={`h-8 w-8 rounded-full border ${textBackgroundColor === preset ? "border-cyan-300" : "border-slate-600"}`}
+                      style={{ backgroundColor: preset }}
+                      aria-label={`Set text background ${preset}`}
+                    />
+                  ))}
+
+                  <label className="ml-1 inline-flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-950/60 px-2 py-1 text-xs text-slate-300">
+                    Custom
+                    <input
+                      type="color"
+                      value={textBackgroundColor}
+                      onChange={(e) => setTextBackgroundColor(e.target.value)}
+                      className="h-6 w-8 cursor-pointer rounded border-none bg-transparent p-0"
+                      aria-label="Custom text background color"
+                    />
+                  </label>
+                </div>
+
+                <div className="mt-3 flex items-center gap-2">
+                  {textAlignOptions.map((option) => {
+                    const Icon = option.icon;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setTextAlign(option.value)}
+                        className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs transition ${
+                          textAlign === option.value
+                            ? "border-cyan-400/70 bg-cyan-500/20 text-cyan-100"
+                            : "border-slate-600 bg-slate-950/60 text-slate-300 hover:border-slate-500"
+                        }`}
+                      >
+                        <Icon className="h-3.5 w-3.5" />
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
 
               <div className="relative mt-4 grid grid-cols-1 gap-3 rounded-2xl border border-slate-700/60 bg-slate-900/35 p-3 md:grid-cols-2">
                 <label className="group flex h-full cursor-pointer flex-col justify-between rounded-xl border border-slate-700/80 bg-slate-950/40 p-3 transition hover:border-cyan-500/50 hover:bg-cyan-500/10">
