@@ -32,7 +32,7 @@ export default async function FeedPage() {
   const users = JSON.parse(JSON.stringify(usersRaw));
 
   return (
-    <main className="relative min-h-svh overflow-hidden bg-site-gradient pb-8">
+    <main className="relative min-h-svh overflow-x-hidden overflow-y-visible bg-site-gradient pb-8">
       <div className="pointer-events-none absolute inset-0 opacity-70">
         <div className="absolute -left-24 top-16 h-80 w-80 rounded-full bg-cyan-500/8 blur-3xl" />
         <div className="absolute -right-28 top-24 h-96 w-96 rounded-full bg-blue-500/10 blur-3xl" />

@@ -128,8 +128,8 @@ export default function FeedClient({ initialPosts, suggestedUsers, currentUserId
     onUpdate: ({ editor: currentEditor }) => setEditorText(currentEditor.getText()),
     editorProps: {
       attributes: {
-        className:
-          "min-h-[150px] rounded-xl border border-slate-700 p-4 outline-none",
+        class:
+          "min-h-[180px] rounded-xl border border-slate-700 p-4 leading-7 outline-none",
       } as unknown as Record<string, string>,
     },
   });
@@ -606,9 +606,15 @@ export default function FeedClient({ initialPosts, suggestedUsers, currentUserId
               </div>
 
               {openCommentPostId === post._id ? (
-                <div className="mt-3 flex gap-2">
-                  <input value={commentDrafts[post._id] ?? ""} onChange={(e) => setCommentDrafts((prev) => ({ ...prev, [post._id]: e.target.value }))} placeholder="Write a thoughtful comment" className="auth-input h-10 flex-1" />
-                  <button className="icon-btn" onClick={() => commentOnPost(post._id)} type="button"><Send className="h-4 w-4" /></button>
+                <div className="mt-3 flex items-end gap-2">
+                  <textarea
+                    value={commentDrafts[post._id] ?? ""}
+                    onChange={(e) => setCommentDrafts((prev) => ({ ...prev, [post._id]: e.target.value }))}
+                    placeholder="Write a thoughtful comment"
+                    rows={3}
+                    className="w-full resize-y rounded-xl border border-slate-700/80 bg-slate-900/70 px-4 py-3 text-slate-100 placeholder:text-slate-500 outline-none transition focus:border-cyan-500"
+                  />
+                  <button className="icon-btn h-11" onClick={() => commentOnPost(post._id)} type="button"><Send className="h-4 w-4" /></button>
                 </div>
               ) : null}
 
@@ -658,7 +664,7 @@ export default function FeedClient({ initialPosts, suggestedUsers, currentUserId
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 10, scale: 0.98 }}
               transition={{ duration: 0.2 }}
-              className="card-panel relative max-h-[92vh] w-full max-w-4xl overflow-y-auto"
+              className="card-panel hide-scrollbar relative max-h-[92vh] w-full max-w-4xl overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="pointer-events-none absolute -right-24 -top-28 h-64 w-64 rounded-full bg-cyan-500/10 blur-3xl" />
