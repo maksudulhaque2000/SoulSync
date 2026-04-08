@@ -12,6 +12,7 @@ const updateSchema = z.object({
   avatar: z.string().optional().default(""),
   phone: z.string().optional().default(""),
   age: z.number().min(0).max(120).optional().default(0),
+  birthDate: z.string().optional().default(""),
   gender: z.enum(["male", "female", "non-binary", "prefer-not-to-say"]),
   bio: z.string().max(300).optional().default(""),
 });
@@ -24,7 +25,7 @@ export async function GET() {
 
   await connectDB();
   const user = await User.findById(session.user.id)
-    .select("firstName lastName email avatar phone age gender bio connections pendingReceived")
+    .select("firstName lastName email avatar phone age birthDate gender bio connections pendingReceived")
     .lean();
 
   return NextResponse.json({ user });
@@ -44,6 +45,19 @@ export async function PUT(req: Request) {
   }
 
   await connectDB();
+
+  const birthDate = parsed.data.birthDate ? new Date(parsed.data.birthDate) : null;
+  const today = new Date();
+  let age = parsed.data.age;
+
+  if (birthDate && !Number.isNaN(birthDate.getTime())) {
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    age = today.getFullYear() - birthDate.getFullYear();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age -= 1;
+    }
+  }
+
   const user = await User.findByIdAndUpdate(
     session.user.id,
     {
@@ -51,13 +65,14 @@ export async function PUT(req: Request) {
       lastName: parsed.data.lastName,
       avatar: parsed.data.avatar,
       phone: parsed.data.phone,
-      age: parsed.data.age,
+      age,
+      birthDate: birthDate && !Number.isNaN(birthDate.getTime()) ? birthDate : null,
       gender: parsed.data.gender,
       bio: parsed.data.bio,
     },
     { new: true }
   )
-    .select("firstName lastName email avatar phone age gender bio")
+    .select("firstName lastName email avatar phone age birthDate gender bio")
     .lean();
 
   return NextResponse.json({ user });

@@ -47,6 +47,23 @@ function getReadableTextColor(hexColor: string) {
   return brightness > 160 ? "#0f172a" : "#e2e8f0";
 }
 
+function calculateAgeFromBirthDate(birthDate: string | undefined) {
+  if (!birthDate) return null;
+
+  const parsed = new Date(birthDate);
+  if (Number.isNaN(parsed.getTime())) return null;
+
+  const today = new Date();
+  let age = today.getFullYear() - parsed.getFullYear();
+  const monthDiff = today.getMonth() - parsed.getMonth();
+
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < parsed.getDate())) {
+    age -= 1;
+  }
+
+  return age >= 0 ? age : null;
+}
+
 export default async function PublicProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const session = await getAuthSession();
   if (!session?.user?.id) {
@@ -62,7 +79,7 @@ export default async function PublicProfilePage({ params }: { params: Promise<{ 
   await connectDB();
 
   const userRaw = await User.findById(id)
-    .select("firstName lastName email avatar phone age gender bio")
+    .select("firstName lastName email avatar phone age birthDate gender bio")
     .lean();
 
   if (!userRaw) {
@@ -123,7 +140,8 @@ export default async function PublicProfilePage({ params }: { params: Promise<{ 
               <p><span className="text-slate-500">Name:</span> {user.firstName} {user.lastName}</p>
               <p><span className="text-slate-500">Email:</span> {user.email || "Not set"}</p>
               <p><span className="text-slate-500">Mobile:</span> {user.phone || "Not set"}</p>
-              <p><span className="text-slate-500">Age:</span> {user.age && user.age > 0 ? user.age : "Not set"}</p>
+              <p><span className="text-slate-500">Birth date:</span> {user.birthDate ? new Date(user.birthDate).toLocaleDateString() : "Not set"}</p>
+              <p><span className="text-slate-500">Age:</span> {calculateAgeFromBirthDate(user.birthDate) ?? (user.age && user.age > 0 ? user.age : null) ?? "Not set"}</p>
               <p><span className="text-slate-500">Gender:</span> {user.gender || "Not set"}</p>
               <p className="sm:col-span-2"><span className="text-slate-500">Bio:</span> {user.bio || "Not set"}</p>
             </div>

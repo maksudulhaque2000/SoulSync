@@ -16,7 +16,7 @@ export default async function ProfilePage() {
   await connectDB();
 
   const userRaw = await User.findById(session.user.id)
-    .select("firstName lastName email avatar phone age gender bio pendingReceived connections")
+    .select("firstName lastName email avatar phone age birthDate gender bio pendingReceived connections")
     .lean();
 
   const postsRaw = await Post.find({ author: session.user.id })

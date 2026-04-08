@@ -10,6 +10,7 @@ const userSchema = new Schema(
     bio: { type: String, default: "" },
     phone: { type: String, default: "" },
     age: { type: Number, default: 0 },
+    birthDate: { type: Date, default: null },
     gender: {
       type: String,
       enum: ["male", "female", "non-binary", "prefer-not-to-say"],

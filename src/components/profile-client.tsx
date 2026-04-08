@@ -16,6 +16,7 @@ type UserProfile = {
   avatar?: string;
   phone?: string;
   age?: number;
+  birthDate?: string;
   gender: "male" | "female" | "non-binary" | "prefer-not-to-say";
   bio?: string;
   pendingReceived?: string[];
@@ -86,6 +87,28 @@ function textToHtml(text: string) {
   const nonEmpty = lines.filter((line) => line.trim().length > 0);
   if (!nonEmpty.length) return "";
   return nonEmpty.map((line) => `<p>${escapeHtml(line)}</p>`).join("");
+}
+
+function calculateAgeFromBirthDate(birthDate: string | undefined) {
+  if (!birthDate) return null;
+
+  const parsed = new Date(birthDate);
+  if (Number.isNaN(parsed.getTime())) return null;
+
+  const today = new Date();
+  let age = today.getFullYear() - parsed.getFullYear();
+  const monthDiff = today.getMonth() - parsed.getMonth();
+
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < parsed.getDate())) {
+    age -= 1;
+  }
+
+  return age >= 0 ? age : null;
+}
+
+function formatBirthDateForInput(birthDate: string | undefined) {
+  if (!birthDate) return "";
+  return birthDate.length >= 10 ? birthDate.slice(0, 10) : birthDate;
 }
 
 export default function ProfileClient({ initialUser, initialPosts }: Props) {
@@ -304,7 +327,8 @@ export default function ProfileClient({ initialUser, initialPosts }: Props) {
         lastName: user.lastName,
         avatar: user.avatar,
         phone: user.phone,
-        age: Number(user.age || 0),
+        age: calculateAgeFromBirthDate(user.birthDate) ?? Number(user.age || 0),
+        birthDate: user.birthDate || "",
         gender: user.gender,
         bio: user.bio,
       }),
@@ -515,7 +539,8 @@ export default function ProfileClient({ initialUser, initialPosts }: Props) {
               <p className="text-slate-300"><span className="text-slate-500">Name:</span> {user.firstName} {user.lastName}</p>
               <p className="text-slate-300"><span className="text-slate-500">Email:</span> {user.email || "Not set"}</p>
               <p className="text-slate-300"><span className="text-slate-500">Mobile:</span> {user.phone || "Not set"}</p>
-              <p className="text-slate-300"><span className="text-slate-500">Age:</span> {user.age && user.age > 0 ? user.age : "Not set"}</p>
+              <p className="text-slate-300"><span className="text-slate-500">Birth date:</span> {user.birthDate ? new Date(user.birthDate).toLocaleDateString() : "Not set"}</p>
+              <p className="text-slate-300"><span className="text-slate-500">Age:</span> {calculateAgeFromBirthDate(user.birthDate) ?? (user.age && user.age > 0 ? user.age : null) ?? "Not set"}</p>
               <p className="text-slate-300"><span className="text-slate-500">Gender:</span> {user.gender || "Not set"}</p>
               <p className="text-slate-300"><span className="text-slate-500">Bio:</span> {user.bio || "Not set"}</p>
             </div>
@@ -712,8 +737,21 @@ export default function ProfileClient({ initialUser, initialPosts }: Props) {
                 <input className="auth-input" value={user.phone || ""} onChange={(e) => setUser((prev) => ({ ...prev, phone: e.target.value }))} />
               </label>
               <label className="space-y-2 text-sm text-slate-300">
+                Birth date
+                <input
+                  className="auth-input"
+                  type="date"
+                  value={formatBirthDateForInput(user.birthDate)}
+                  onChange={(e) => {
+                    const nextBirthDate = e.target.value;
+                    const calculatedAge = calculateAgeFromBirthDate(nextBirthDate) ?? 0;
+                    setUser((prev) => ({ ...prev, birthDate: nextBirthDate, age: calculatedAge }));
+                  }}
+                />
+              </label>
+              <label className="space-y-2 text-sm text-slate-300">
                 Age
-                <input className="auth-input" type="number" value={user.age || 0} onChange={(e) => setUser((prev) => ({ ...prev, age: Number(e.target.value) }))} />
+                <input className="auth-input opacity-70" type="number" value={(calculateAgeFromBirthDate(user.birthDate) ?? user.age) || 0} disabled />
               </label>
               <label className="space-y-2 text-sm text-slate-300">
                 Gender
