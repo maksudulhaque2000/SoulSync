@@ -6,9 +6,10 @@ import Placeholder from "@tiptap/extension-placeholder";
 import StarterKit from "@tiptap/starter-kit";
 import TiptapImage from "@tiptap/extension-image";
 import { formatDistanceToNow } from "date-fns";
-import { AlignCenter, AlignLeft, AlignRight, CheckCircle2, Copy, FileText, HandHeart, Heart, ImagePlus, Lightbulb, MessageCircle, PartyPopper, Send, Share2, Sparkles, ThumbsUp, Upload, UserPlus, X } from "lucide-react";
+import { AlignCenter, AlignLeft, AlignRight, CheckCircle2, Copy, Eye, EyeOff, FileText, HandHeart, Heart, ImagePlus, Lightbulb, MessageCircle, MoreHorizontal, PartyPopper, Pencil, Send, Share2, Sparkles, ThumbsUp, Trash2, Upload, UserPlus, X } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import Image from "next/image";
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type ChangeEvent, useCallback, useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
@@ -27,6 +28,7 @@ type Media = {
 type Post = {
   _id: string;
   content: string;
+  isHidden?: boolean;
   textStyle?: {
     backgroundColor?: string;
     textAlign?: "left" | "center" | "right";
@@ -92,6 +94,22 @@ function htmlToText(html: string) {
   return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 }
 
+function escapeHtml(text: string) {
+  return text
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function textToHtml(text: string) {
+  const lines = text.split(/\r?\n/).map((line) => line.trimEnd());
+  const nonEmpty = lines.filter((line) => line.trim().length > 0);
+  if (!nonEmpty.length) return "";
+  return nonEmpty.map((line) => `<p>${escapeHtml(line)}</p>`).join("");
+}
+
 type Props = {
   initialPosts: Post[];
   suggestedUsers: SuggestedUser[];
@@ -109,8 +127,12 @@ export default function FeedClient({ initialPosts, suggestedUsers, currentUserId
   const [openReactionPostId, setOpenReactionPostId] = useState<string | null>(null);
   const [openCommentPostId, setOpenCommentPostId] = useState<string | null>(null);
   const [openSharePostId, setOpenSharePostId] = useState<string | null>(null);
+  const [openManagePostId, setOpenManagePostId] = useState<string | null>(null);
   const [openFocusPostId, setOpenFocusPostId] = useState<string | null>(null);
   const [openComposeModal, setOpenComposeModal] = useState(false);
+  const [editingPostId, setEditingPostId] = useState<string | null>(null);
+  const [editText, setEditText] = useState("");
+  const [workingPostId, setWorkingPostId] = useState<string | null>(null);
   const [textBackgroundColor, setTextBackgroundColor] = useState("#1e293b");
   const [textAlign, setTextAlign] = useState<"left" | "center" | "right">("left");
 
@@ -153,6 +175,11 @@ export default function FeedClient({ initialPosts, suggestedUsers, currentUserId
   const activeSharePost = useMemo(
     () => posts.find((post) => post._id === openSharePostId) ?? null,
     [openSharePostId, posts]
+  );
+
+  const editingPost = useMemo(
+    () => posts.find((post) => post._id === editingPostId) ?? null,
+    [editingPostId, posts]
   );
 
   const activeFocusPost = useMemo(
@@ -501,6 +528,87 @@ export default function FeedClient({ initialPosts, suggestedUsers, currentUserId
     playActionSound("notification");
   };
 
+  const openPostEditor = (post: Post) => {
+    setEditingPostId(post._id);
+    setEditText(htmlToText(post.content));
+    setOpenManagePostId(null);
+  };
+
+  const closePostEditor = () => {
+    setEditingPostId(null);
+    setEditText("");
+  };
+
+  const savePostEdit = async () => {
+    if (!editingPostId) return;
+    setWorkingPostId(editingPostId);
+
+    try {
+      const res = await fetch(`/api/posts/${editingPostId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: textToHtml(editText) }),
+      });
+
+      if (!res.ok) {
+        toast.error("Post update failed");
+        return;
+      }
+
+      await reloadPosts();
+      closePostEditor();
+      toast.success("Post updated");
+    } finally {
+      setWorkingPostId(null);
+    }
+  };
+
+  const deletePost = async (postId: string) => {
+    const confirmed = window.confirm("Delete this post permanently?");
+    if (!confirmed) return;
+
+    setWorkingPostId(postId);
+    setOpenManagePostId(null);
+    try {
+      const res = await fetch(`/api/posts/${postId}`, { method: "DELETE" });
+      if (!res.ok) {
+        toast.error("Delete failed");
+        return;
+      }
+
+      setPosts((prev) => prev.filter((post) => post._id !== postId));
+      toast.success("Post deleted");
+      playActionSound("notification");
+    } finally {
+      setWorkingPostId(null);
+    }
+  };
+
+  const togglePostHidden = async (post: Post) => {
+    setWorkingPostId(post._id);
+    setOpenManagePostId(null);
+
+    try {
+      const shouldHide = !post.isHidden;
+      const res = await fetch(`/api/posts/${post._id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isHidden: shouldHide }),
+      });
+
+      if (!res.ok) {
+        toast.error("Visibility update failed");
+        return;
+      }
+
+      const data = await res.json();
+      setPosts((prev) => prev.map((item) => (item._id === post._id ? data.post : item)));
+      toast.success(shouldHide ? "Post hidden from others" : "Post is visible now");
+    } finally {
+      setWorkingPostId(null);
+    }
+  };
+
   return (
     <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-5 px-4 py-6 lg:grid-cols-[1.5fr_0.8fr]">
       <section className="space-y-5">
@@ -529,15 +637,87 @@ export default function FeedClient({ initialPosts, suggestedUsers, currentUserId
 
         {posts.map((post, i) => {
           const myReaction = post.reactions.find((r) => r.user?._id === currentUserId)?.type;
+          const isOwner = post.author?._id === currentUserId;
+          const authorFullName = `${post.author.firstName} ${post.author.lastName}`;
+          const authorInitials = `${post.author.firstName?.[0] ?? ""}${post.author.lastName?.[0] ?? ""}`.toUpperCase();
           const postBackgroundColor = normalizeHexColor(post.textStyle?.backgroundColor) ?? "#1e293b";
           const postTextAlign = post.textStyle?.textAlign ?? "left";
           const postTextColor = getReadableTextColor(postBackgroundColor);
 
           return (
             <motion.article key={post._id} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} className="card-panel">
-              <div className="mb-3 flex items-center justify-between text-sm text-slate-300">
-                <p>{post.author.firstName} {post.author.lastName}</p>
-                <p>{formatDistanceToNow(new Date(post.createdAt), { addSuffix: true })}</p>
+              <div className="relative mb-3 flex items-center justify-between gap-3 text-sm text-slate-300">
+                <Link href={`/profile/${post.author._id}`} className="inline-flex items-center gap-2 rounded-lg pr-2 transition hover:text-cyan-200">
+                  {post.author.avatar ? (
+                    <Image
+                      src={post.author.avatar}
+                      alt={authorFullName}
+                      width={36}
+                      height={36}
+                      unoptimized
+                      className="h-9 w-9 rounded-full border border-slate-700 object-cover"
+                    />
+                  ) : (
+                    <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-700 bg-slate-800 text-xs font-semibold text-slate-200">
+                      {authorInitials || "U"}
+                    </span>
+                  )}
+                  <span>{authorFullName}</span>
+                </Link>
+
+                <div className="flex items-center gap-2">
+                  <p>{formatDistanceToNow(new Date(post.createdAt), { addSuffix: true })}</p>
+                  {isOwner ? (
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setOpenManagePostId((prev) => (prev === post._id ? null : post._id))}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-700 bg-slate-900/80 text-slate-300 transition hover:bg-slate-800"
+                        aria-label="Manage post"
+                      >
+                        <MoreHorizontal className="h-4 w-4" />
+                      </button>
+
+                      <AnimatePresence>
+                        {openManagePostId === post._id ? (
+                          <motion.div
+                            initial={{ opacity: 0, y: 6 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: 6 }}
+                            className="absolute right-0 top-10 z-30 w-44 rounded-xl border border-slate-700 bg-slate-900/95 p-1.5 shadow-xl"
+                          >
+                            <button
+                              type="button"
+                              onClick={() => openPostEditor(post)}
+                              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-slate-200 transition hover:bg-slate-800"
+                            >
+                              <Pencil className="h-4 w-4" />
+                              Edit post
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void togglePostHidden(post)}
+                              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-slate-200 transition hover:bg-slate-800"
+                              disabled={workingPostId === post._id}
+                            >
+                              {post.isHidden ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                              {post.isHidden ? "Unhide post" : "Hide post"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void deletePost(post._id)}
+                              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-rose-200 transition hover:bg-rose-500/15"
+                              disabled={workingPostId === post._id}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              Delete post
+                            </button>
+                          </motion.div>
+                        ) : null}
+                      </AnimatePresence>
+                    </div>
+                  ) : null}
+                </div>
               </div>
 
               <div
@@ -749,6 +929,64 @@ export default function FeedClient({ initialPosts, suggestedUsers, currentUserId
           </motion.div>
         ) : null}
 
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {editingPostId && editingPost ? (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-90 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm"
+            onClick={closePostEditor}
+          >
+            <motion.article
+              initial={{ opacity: 0, y: 16, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.98 }}
+              transition={{ duration: 0.2 }}
+              className="card-panel w-full max-w-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="font-display text-xl text-slate-100">Edit Post</h3>
+                <button
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-slate-900/70 text-slate-300 transition hover:bg-slate-800"
+                  type="button"
+                  onClick={closePostEditor}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <textarea
+                value={editText}
+                onChange={(e) => setEditText(e.target.value)}
+                rows={8}
+                className="w-full rounded-xl border border-slate-700/80 bg-slate-900/70 px-4 py-3 text-slate-100 placeholder:text-slate-500 outline-none transition focus:border-cyan-500"
+                placeholder="Refine your story"
+              />
+
+              <div className="mt-3 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={closePostEditor}
+                  className="rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-1.5 text-sm text-slate-200 transition hover:bg-slate-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void savePostEdit()}
+                  disabled={workingPostId === editingPostId}
+                  className="rounded-lg border border-cyan-500/60 bg-cyan-500/20 px-3 py-1.5 text-sm text-cyan-100 transition hover:bg-cyan-500/30 disabled:opacity-60"
+                >
+                  {workingPostId === editingPostId ? "Saving..." : "Save changes"}
+                </button>
+              </div>
+            </motion.article>
+          </motion.div>
+        ) : null}
       </AnimatePresence>
 
       <AnimatePresence>
