@@ -15,7 +15,7 @@ export default async function FeedPage() {
 
   await connectDB();
 
-  const postsRaw = await Post.find({})
+  const postsRaw = await Post.find({ isHidden: { $ne: true } })
     .sort({ createdAt: -1 })
     .populate("author", "firstName lastName avatar")
     .populate("comments.user", "firstName lastName avatar")

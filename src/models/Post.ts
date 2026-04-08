@@ -4,6 +4,7 @@ const postSchema = new Schema(
   {
     author: { type: Schema.Types.ObjectId, ref: "User", required: true },
     content: { type: String, default: "" },
+    isHidden: { type: Boolean, default: false },
     textStyle: {
       backgroundColor: { type: String, default: "#1e293b" },
       textAlign: {

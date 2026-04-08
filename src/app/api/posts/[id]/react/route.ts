@@ -30,6 +30,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: "Post not found" }, { status: 404 });
   }
 
+  if (post.isHidden && post.author.toString() !== session.user.id) {
+    return NextResponse.json({ error: "Post not found" }, { status: 404 });
+  }
+
   const existingIndex = post.reactions.findIndex(
     (r: { user: { toString: () => string }; type: string }) => r.user.toString() === session.user.id
   );
@@ -46,7 +50,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         type: "post_reaction",
         title: "New reaction",
         body: `${session.user.firstName} reacted to your post with ${parsed.data.type}.`,
-        link: "/feed",
+        link: `/feed?post=${id}`,
       });
     }
   }

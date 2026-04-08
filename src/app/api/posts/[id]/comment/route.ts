@@ -30,6 +30,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: "Post not found" }, { status: 404 });
   }
 
+  if (post.isHidden && post.author.toString() !== session.user.id) {
+    return NextResponse.json({ error: "Post not found" }, { status: 404 });
+  }
+
   post.comments.push({ user: session.user.id, text: parsed.data.text });
   await post.save();
 
@@ -39,7 +43,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       type: "post_comment",
       title: "New comment",
       body: `${session.user.firstName} commented on your post.`,
-      link: "/feed",
+      link: `/feed?post=${id}`,
     });
   }
 

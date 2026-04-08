@@ -9,6 +9,7 @@ import { formatDistanceToNow } from "date-fns";
 import { AlignCenter, AlignLeft, AlignRight, CheckCircle2, Copy, FileText, HandHeart, Heart, ImagePlus, Lightbulb, MessageCircle, PartyPopper, Send, Share2, Sparkles, ThumbsUp, Upload, UserPlus, X } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import Image from "next/image";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type ChangeEvent, useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 
@@ -108,9 +109,14 @@ export default function FeedClient({ initialPosts, suggestedUsers, currentUserId
   const [openReactionPostId, setOpenReactionPostId] = useState<string | null>(null);
   const [openCommentPostId, setOpenCommentPostId] = useState<string | null>(null);
   const [openSharePostId, setOpenSharePostId] = useState<string | null>(null);
+  const [openFocusPostId, setOpenFocusPostId] = useState<string | null>(null);
   const [openComposeModal, setOpenComposeModal] = useState(false);
   const [textBackgroundColor, setTextBackgroundColor] = useState("#1e293b");
   const [textAlign, setTextAlign] = useState<"left" | "center" | "right">("left");
+
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const router = useRouter();
 
   const indexedAttachments = useMemo(
     () => attachments.map((attachment, index) => ({ ...attachment, index })),
@@ -149,6 +155,11 @@ export default function FeedClient({ initialPosts, suggestedUsers, currentUserId
     [openSharePostId, posts]
   );
 
+  const activeFocusPost = useMemo(
+    () => posts.find((post) => post._id === openFocusPostId) ?? null,
+    [openFocusPostId, posts]
+  );
+
   const activeShareLink = useMemo(
     () =>
       openSharePostId && typeof window !== "undefined"
@@ -164,13 +175,17 @@ export default function FeedClient({ initialPosts, suggestedUsers, currentUserId
   }, [activeSharePost]);
 
   useEffect(() => {
-    const hasModalOpen = Boolean(openSharePostId || openComposeModal);
+    const hasModalOpen = Boolean(openSharePostId || openComposeModal || openFocusPostId);
     if (!hasModalOpen) return;
 
     const onEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       if (openComposeModal) {
         setOpenComposeModal(false);
+        return;
+      }
+      if (openFocusPostId) {
+        closeFocusPost();
         return;
       }
       if (openSharePostId) {
@@ -186,7 +201,21 @@ export default function FeedClient({ initialPosts, suggestedUsers, currentUserId
       document.body.style.overflow = originalOverflow;
       document.removeEventListener("keydown", onEscape);
     };
-  }, [openComposeModal, openSharePostId]);
+  }, [openComposeModal, openFocusPostId, openSharePostId]);
+
+  useEffect(() => {
+    const postId = searchParams.get("post");
+    if (!postId) return;
+    setOpenFocusPostId(postId);
+  }, [searchParams]);
+
+  const closeFocusPost = () => {
+    setOpenFocusPostId(null);
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("post");
+    const next = params.toString();
+    router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false });
+  };
 
   const reloadPosts = async () => {
     const refresh = await fetch("/api/posts", { cache: "no-store" });
@@ -649,6 +678,78 @@ export default function FeedClient({ initialPosts, suggestedUsers, currentUserId
           </div>
         </div>
       </aside>
+
+      <AnimatePresence>
+        {openFocusPostId && activeFocusPost ? (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-90 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm"
+            onClick={closeFocusPost}
+          >
+            <motion.article
+              initial={{ opacity: 0, y: 16, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.98 }}
+              transition={{ duration: 0.2 }}
+              className="hide-scrollbar card-panel relative max-h-[92vh] w-full max-w-3xl overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="mb-3 flex items-center justify-between text-sm text-slate-300">
+                <p>{activeFocusPost.author.firstName} {activeFocusPost.author.lastName}</p>
+                <div className="inline-flex items-center gap-2">
+                  <p>{formatDistanceToNow(new Date(activeFocusPost.createdAt), { addSuffix: true })}</p>
+                  <button
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-slate-900/70 text-slate-300 transition hover:bg-slate-800"
+                    type="button"
+                    onClick={closeFocusPost}
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+
+              <div
+                className="prose max-w-none rounded-xl px-4 py-3 shadow-inner **:text-inherit"
+                style={{
+                  backgroundColor: normalizeHexColor(activeFocusPost.textStyle?.backgroundColor) ?? "#1e293b",
+                  color: getReadableTextColor(normalizeHexColor(activeFocusPost.textStyle?.backgroundColor) ?? "#1e293b"),
+                  textAlign: activeFocusPost.textStyle?.textAlign ?? "left",
+                }}
+                dangerouslySetInnerHTML={{ __html: activeFocusPost.content }}
+              />
+
+              {activeFocusPost.media?.length ? (
+                <div className="mt-4 space-y-2">
+                  <div className={`grid gap-2 ${imageGridClass(activeFocusPost.media.filter((m) => m.type === "image").length)}`}>
+                    {activeFocusPost.media
+                      .filter((m) => m.type === "image")
+                      .map((media) => (
+                        <Image
+                          key={`focus-${media.url}`}
+                          src={media.url}
+                          alt={media.name ?? "post image"}
+                          width={1400}
+                          height={900}
+                          unoptimized
+                          className="h-auto max-h-136 w-full rounded-xl bg-slate-950/70 object-contain"
+                        />
+                      ))}
+                  </div>
+                  {activeFocusPost.media.filter((m) => m.type === "pdf").map((media) => (
+                    <a key={`focus-${media.url}`} href={media.url} target="_blank" className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-1.5 text-sm hover:bg-slate-800">
+                      <FileText className="h-4 w-4" />
+                      {media.name ?? "PDF attachment"}
+                    </a>
+                  ))}
+                </div>
+              ) : null}
+            </motion.article>
+          </motion.div>
+        ) : null}
+
+      </AnimatePresence>
 
       <AnimatePresence>
         {openComposeModal ? (

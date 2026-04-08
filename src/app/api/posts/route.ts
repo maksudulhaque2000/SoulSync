@@ -34,7 +34,7 @@ const createPostSchema = z.object({
 
 export async function GET() {
   await connectDB();
-  const posts = await Post.find({})
+  const posts = await Post.find({ isHidden: { $ne: true } })
     .sort({ createdAt: -1 })
     .populate("author", "firstName lastName avatar")
     .populate("comments.user", "firstName lastName avatar")
@@ -71,7 +71,7 @@ export async function POST(req: Request) {
     type: "system",
     title: "Post published",
     body: "Your thought has been shared to SoulSync feed.",
-    link: "/feed",
+    link: `/feed?post=${post._id.toString()}`,
   });
 
   return NextResponse.json({ post }, { status: 201 });
