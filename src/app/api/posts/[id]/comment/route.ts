@@ -6,6 +6,7 @@ import { connectDB } from "@/lib/db";
 import Notification from "@/models/Notification";
 import Post from "@/models/Post";
 
+export const runtime = "nodejs";
 const commentSchema = z.object({
   text: z.string().min(1).max(1000),
 });

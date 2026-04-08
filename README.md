@@ -1,3 +1,13 @@
+## Production Setup
+
+Set these environment variables in Vercel before deploying:
+
+- `MONGODB_URI`
+- `NEXTAUTH_SECRET`
+- `NEXTAUTH_URL`
+- `BLOB_READ_WRITE_TOKEN`
+
+For local development, copy `.env.example` to `.env.local` and fill in the values.
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started

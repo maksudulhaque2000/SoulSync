@@ -10,7 +10,7 @@ import { AlignCenter, AlignLeft, AlignRight, CheckCircle2, Copy, FileText, HandH
 import { AnimatePresence, motion } from "framer-motion";
 import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { type ChangeEvent, useEffect, useMemo, useState } from "react";
+import { type ChangeEvent, useCallback, useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 
 import { playActionSound } from "@/components/sound";
@@ -174,6 +174,14 @@ export default function FeedClient({ initialPosts, suggestedUsers, currentUserId
     return text.length > 140 ? `${text.slice(0, 140)}...` : text;
   }, [activeSharePost]);
 
+  const closeFocusPost = useCallback(() => {
+    setOpenFocusPostId(null);
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("post");
+    const next = params.toString();
+    router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false });
+  }, [pathname, router, searchParams]);
+
   useEffect(() => {
     const hasModalOpen = Boolean(openSharePostId || openComposeModal || openFocusPostId);
     if (!hasModalOpen) return;
@@ -201,21 +209,13 @@ export default function FeedClient({ initialPosts, suggestedUsers, currentUserId
       document.body.style.overflow = originalOverflow;
       document.removeEventListener("keydown", onEscape);
     };
-  }, [openComposeModal, openFocusPostId, openSharePostId]);
+  }, [closeFocusPost, openComposeModal, openFocusPostId, openSharePostId]);
 
   useEffect(() => {
     const postId = searchParams.get("post");
     if (!postId) return;
     setOpenFocusPostId(postId);
   }, [searchParams]);
-
-  const closeFocusPost = () => {
-    setOpenFocusPostId(null);
-    const params = new URLSearchParams(searchParams.toString());
-    params.delete("post");
-    const next = params.toString();
-    router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false });
-  };
 
   const reloadPosts = async () => {
     const refresh = await fetch("/api/posts", { cache: "no-store" });

@@ -6,6 +6,7 @@ import { connectDB } from "@/lib/db";
 import Notification from "@/models/Notification";
 import Post from "@/models/Post";
 
+export const runtime = "nodejs";
 const reactSchema = z.object({
   type: z.enum(["love", "care", "celebrate", "insightful", "support"]),
 });

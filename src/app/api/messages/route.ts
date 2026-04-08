@@ -6,6 +6,8 @@ import { connectDB } from "@/lib/db";
 import Message from "@/models/Message";
 import Notification from "@/models/Notification";
 
+export const runtime = "nodejs";
+
 const postMessageSchema = z.object({
   to: z.string().min(1),
   text: z.string().max(1000).optional().default(""),

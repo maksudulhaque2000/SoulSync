@@ -5,6 +5,8 @@ import { z } from "zod";
 import { connectDB } from "@/lib/db";
 import User from "@/models/User";
 
+export const runtime = "nodejs";
+
 const registerSchema = z.object({
   firstName: z.string().min(2).max(30),
   lastName: z.string().min(2).max(30),

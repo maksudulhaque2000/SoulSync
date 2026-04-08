@@ -4,6 +4,7 @@ import { getAuthSession } from "@/lib/auth";
 import { connectDB } from "@/lib/db";
 import Post from "@/models/Post";
 
+export const runtime = "nodejs";
 export async function GET() {
   const session = await getAuthSession();
   if (!session?.user?.id) {

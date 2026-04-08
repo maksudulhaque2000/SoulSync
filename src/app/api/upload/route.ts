@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import { put } from "@vercel/blob";
 import { NextResponse } from "next/server";
 
 import { getAuthSession } from "@/lib/auth";
@@ -23,10 +24,35 @@ export async function POST(req: Request) {
 
   const fileExt = file.name.split(".").pop() ?? "bin";
   const safeName = `${Date.now()}-${randomUUID()}.${fileExt}`;
+  const buffer = Buffer.from(await file.arrayBuffer());
+
+  if (process.env.BLOB_READ_WRITE_TOKEN) {
+    const blob = await put(`uploads/${safeName}`, file, {
+      access: "public",
+    });
+
+    const type = file.type.startsWith("image/") ? "image" : file.type === "application/pdf" ? "pdf" : "file";
+
+    return NextResponse.json({
+      url: blob.url,
+      name: file.name,
+      size: file.size,
+      type,
+    });
+  }
+
+  if (process.env.VERCEL === "1") {
+    return NextResponse.json(
+      {
+        error: "BLOB_READ_WRITE_TOKEN is required for uploads on Vercel",
+      },
+      { status: 500 }
+    );
+  }
+
   const uploadDir = path.join(process.cwd(), "public", "uploads");
 
   await mkdir(uploadDir, { recursive: true });
-  const buffer = Buffer.from(await file.arrayBuffer());
   await writeFile(path.join(uploadDir, safeName), buffer);
 
   const type = file.type.startsWith("image/") ? "image" : file.type === "application/pdf" ? "pdf" : "file";

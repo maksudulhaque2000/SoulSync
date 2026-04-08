@@ -1,9 +1,12 @@
+
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getAuthSession } from "@/lib/auth";
 import { connectDB } from "@/lib/db";
 import Notification from "@/models/Notification";
+
+export const runtime = "nodejs";
 
 const patchSchema = z.object({
   id: z.string().optional(),

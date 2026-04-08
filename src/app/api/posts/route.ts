@@ -6,6 +6,7 @@ import { connectDB } from "@/lib/db";
 import Notification from "@/models/Notification";
 import Post from "@/models/Post";
 
+export const runtime = "nodejs";
 const createPostSchema = z.object({
   content: z.string().max(20000).optional().default(""),
   textStyle: z

@@ -6,6 +6,8 @@ import { connectDB } from "@/lib/db";
 import Notification from "@/models/Notification";
 import User from "@/models/User";
 
+export const runtime = "nodejs";
+
 const requestSchema = z.object({
   targetUserId: z.string().min(1),
 });

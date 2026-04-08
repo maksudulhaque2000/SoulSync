@@ -5,6 +5,7 @@ import { getAuthSession } from "@/lib/auth";
 import { connectDB } from "@/lib/db";
 import Post from "@/models/Post";
 
+export const runtime = "nodejs";
 const mediaSchema = z.object({
   url: z.string(),
   type: z.enum(["image", "pdf"]),
