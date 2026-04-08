@@ -19,6 +19,7 @@ const userSchema = new Schema(
     connections: [{ type: Schema.Types.ObjectId, ref: "User" }],
     pendingSent: [{ type: Schema.Types.ObjectId, ref: "User" }],
     pendingReceived: [{ type: Schema.Types.ObjectId, ref: "User" }],
+    blockedUsers: [{ type: Schema.Types.ObjectId, ref: "User" }],
   },
   { timestamps: true }
 );

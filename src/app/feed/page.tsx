@@ -15,6 +15,26 @@ export default async function FeedPage() {
 
   await connectDB();
 
+  const meRaw = await User.findById(session.user.id)
+    .select("connections pendingSent pendingReceived blockedUsers")
+    .lean();
+
+  if (!meRaw) {
+    redirect("/");
+  }
+
+  const me = JSON.parse(JSON.stringify(meRaw)) as {
+    connections?: string[];
+    pendingSent?: string[];
+    pendingReceived?: string[];
+    blockedUsers?: string[];
+  };
+
+  const connectionIds = me.connections ?? [];
+  const pendingSentIds = me.pendingSent ?? [];
+  const pendingReceivedIds = me.pendingReceived ?? [];
+  const blockedUserIds = me.blockedUsers ?? [];
+
   const postsRaw = await Post.find({ isHidden: { $ne: true } })
     .sort({ createdAt: -1 })
     .populate("author", "firstName lastName avatar")
@@ -22,14 +42,26 @@ export default async function FeedPage() {
     .populate("reactions.user", "firstName lastName avatar")
     .lean();
 
-  const usersRaw = await User.find({ _id: { $ne: session.user.id } })
+  const usersRaw = await User.find({
+    _id: {
+      $nin: [session.user.id, ...connectionIds, ...pendingSentIds, ...pendingReceivedIds, ...blockedUserIds],
+    },
+  })
     .select("firstName lastName bio avatar")
     .sort({ createdAt: -1 })
     .limit(8)
     .lean();
 
+  const incomingRequestsRaw = pendingReceivedIds.length
+    ? await User.find({ _id: { $in: pendingReceivedIds } })
+        .select("firstName lastName bio avatar")
+        .sort({ createdAt: -1 })
+        .lean()
+    : [];
+
   const posts = JSON.parse(JSON.stringify(postsRaw));
   const users = JSON.parse(JSON.stringify(usersRaw));
+  const incomingRequests = JSON.parse(JSON.stringify(incomingRequestsRaw));
 
   return (
     <main className="relative min-h-svh overflow-x-hidden overflow-y-visible bg-site-gradient pb-8">
@@ -40,7 +72,12 @@ export default async function FeedPage() {
       </div>
 
       <TopNav fullName={`${session.user.firstName} ${session.user.lastName}`} />
-      <FeedClient initialPosts={posts} suggestedUsers={users} currentUserId={session.user.id} />
+      <FeedClient
+        initialPosts={posts}
+        suggestedUsers={users}
+        incomingRequests={incomingRequests}
+        currentUserId={session.user.id}
+      />
     </main>
   );
 }

@@ -37,6 +37,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
+  const iBlockedTarget = me.blockedUsers.some(
+    (id: { toString: () => string }) => id.toString() === target._id.toString()
+  );
+  const targetBlockedMe = target.blockedUsers.some(
+    (id: { toString: () => string }) => id.toString() === me._id.toString()
+  );
+  if (iBlockedTarget || targetBlockedMe) {
+    return NextResponse.json({ error: "Connection is unavailable for this user" }, { status: 403 });
+  }
+
   const alreadyConnected = me.connections.some((id: { toString: () => string }) => id.toString() === target._id.toString());
   if (alreadyConnected) {
     return NextResponse.json({ error: "Already connected" }, { status: 409 });
@@ -54,7 +64,7 @@ export async function POST(req: Request) {
       type: "connection_request",
       title: "New connection request",
       body: `${session.user.firstName} sent you a connection request.`,
-      link: "/profile",
+      link: `/profile?requesterId=${session.user.id}`,
       meta: { from: session.user.id },
     });
   }

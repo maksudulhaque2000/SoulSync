@@ -25,8 +25,9 @@ export async function GET() {
 
   await connectDB();
   const user = await User.findById(session.user.id)
-    .select("firstName lastName email avatar phone age birthDate gender bio connections pendingReceived")
+    .select("firstName lastName email avatar phone age birthDate gender bio connections pendingReceived blockedUsers")
     .populate("pendingReceived", "firstName lastName avatar")
+    .populate("connections", "firstName lastName avatar")
     .lean();
 
   return NextResponse.json({ user });

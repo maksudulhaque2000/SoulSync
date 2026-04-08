@@ -1,15 +1,23 @@
 "use client";
 
 import { formatDistanceToNow } from "date-fns";
-import { Camera, Check, Eye, EyeOff, FileText, Pencil, Save, Trash2, Upload, UserCheck, X } from "lucide-react";
+import { Ban, Camera, Check, Eye, EyeOff, FileText, Pencil, Save, Trash2, Upload, UserCheck, UserMinus, X } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { type ChangeEvent, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
 
 import { playActionSound } from "@/components/sound";
 
 type PendingRequester = {
+  _id: string;
+  firstName?: string;
+  lastName?: string;
+  avatar?: string;
+};
+
+type ConnectedUser = {
   _id: string;
   firstName?: string;
   lastName?: string;
@@ -28,7 +36,8 @@ type UserProfile = {
   gender: "male" | "female" | "non-binary" | "prefer-not-to-say";
   bio?: string;
   pendingReceived?: Array<string | PendingRequester>;
-  connections?: string[];
+  connections?: Array<string | ConnectedUser>;
+  blockedUsers?: string[];
 };
 
 type Props = {
@@ -139,6 +148,26 @@ function parseRequester(requester: string | PendingRequester) {
   };
 }
 
+function parseConnectedUser(connection: string | ConnectedUser) {
+  if (typeof connection === "string") {
+    return {
+      id: connection,
+      firstName: "Unknown",
+      lastName: "User",
+      avatar: "",
+      isFallback: true,
+    };
+  }
+
+  return {
+    id: connection._id,
+    firstName: connection.firstName || "Unknown",
+    lastName: connection.lastName || "User",
+    avatar: connection.avatar || "",
+    isFallback: false,
+  };
+}
+
 export default function ProfileClient({ initialUser, initialPosts }: Props) {
   const [user, setUser] = useState(initialUser);
   const [posts, setPosts] = useState(initialPosts);
@@ -152,6 +181,8 @@ export default function ProfileClient({ initialUser, initialPosts }: Props) {
   const [editBackgroundColor, setEditBackgroundColor] = useState("#1e293b");
   const [editTextAlign, setEditTextAlign] = useState<"left" | "center" | "right">("left");
   const avatarInputRef = useRef<HTMLInputElement>(null);
+  const searchParams = useSearchParams();
+  const focusedRequesterId = searchParams.get("requesterId");
 
   const editingPost = useMemo(
     () => posts.find((post) => post._id === editingPostId) ?? null,
@@ -415,6 +446,49 @@ export default function ProfileClient({ initialUser, initialPosts }: Props) {
     setUser(data.user);
   };
 
+  const disconnectUser = async (targetUserId: string) => {
+    const res = await fetch("/api/connection/remove", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ targetUserId }),
+    });
+
+    if (!res.ok) {
+      toast.error("Could not remove connection");
+      return;
+    }
+
+    toast.success("Connection removed");
+    playActionSound("notification");
+
+    const refetch = await fetch("/api/profile", { cache: "no-store" });
+    const data = await refetch.json();
+    setUser(data.user);
+  };
+
+  const blockUser = async (targetUserId: string) => {
+    const confirmed = window.confirm("Block this user? This will also remove connection and requests.");
+    if (!confirmed) return;
+
+    const res = await fetch("/api/connection/block", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ targetUserId }),
+    });
+
+    if (!res.ok) {
+      toast.error("Could not block user");
+      return;
+    }
+
+    toast.success("User blocked");
+    playActionSound("notification");
+
+    const refetch = await fetch("/api/profile", { cache: "no-store" });
+    const data = await refetch.json();
+    setUser(data.user);
+  };
+
   return (
     <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-5 px-4 py-6 lg:grid-cols-[1.35fr_0.65fr]">
       <section className="space-y-5">
@@ -604,9 +678,10 @@ export default function ProfileClient({ initialUser, initialPosts }: Props) {
               (user.pendingReceived || []).map((requester) => {
                 const parsed = parseRequester(requester);
                 const initials = `${parsed.firstName?.[0] ?? ""}${parsed.lastName?.[0] ?? ""}`.toUpperCase() || "U";
+                const isFocused = Boolean(focusedRequesterId && focusedRequesterId === parsed.id);
 
                 return (
-                <div key={parsed.id} className="rounded-xl border border-slate-700 bg-slate-900/40 p-2">
+                <div key={parsed.id} className={`rounded-xl border p-2 ${isFocused ? "border-cyan-400/70 bg-cyan-500/10" : "border-slate-700 bg-slate-900/40"}`}>
                   <Link href={`/profile/${parsed.id}`} className="flex items-center gap-2 rounded-lg p-1 transition hover:bg-slate-800/70">
                     {parsed.avatar ? (
                       <Image
@@ -655,6 +730,65 @@ export default function ProfileClient({ initialUser, initialPosts }: Props) {
             <UserCheck className="h-4 w-4 text-cyan-300" />
             {(user.connections || []).length} connected users
           </p>
+
+          <div className="mt-3 space-y-2">
+            {(user.connections || []).length === 0 ? (
+              <p className="text-sm text-slate-400">No connected users yet.</p>
+            ) : (
+              (user.connections || []).map((connection) => {
+                const parsed = parseConnectedUser(connection);
+                const initials = `${parsed.firstName?.[0] ?? ""}${parsed.lastName?.[0] ?? ""}`.toUpperCase() || "U";
+
+                return (
+                  <div key={parsed.id} className="rounded-xl border border-slate-700 bg-slate-900/40 p-2">
+                    <Link href={`/profile/${parsed.id}`} className="flex items-center gap-2 rounded-lg p-1 transition hover:bg-slate-800/70">
+                      {parsed.avatar ? (
+                        <Image
+                          src={parsed.avatar}
+                          alt={`${parsed.firstName} ${parsed.lastName}`}
+                          width={36}
+                          height={36}
+                          unoptimized
+                          className="h-9 w-9 rounded-full border border-slate-700 object-cover"
+                        />
+                      ) : (
+                        <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-700 bg-slate-800 text-xs font-semibold text-slate-200">
+                          {initials}
+                        </span>
+                      )}
+
+                      <span className="text-sm text-slate-200">
+                        {parsed.firstName} {parsed.lastName}
+                      </span>
+                    </Link>
+
+                    {parsed.isFallback ? (
+                      <p className="mt-1 px-1 text-xs text-slate-500">User details are not available for this connection.</p>
+                    ) : null}
+
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <button
+                        className="inline-flex items-center gap-1 rounded-lg border border-amber-500/50 px-2.5 py-1 text-xs text-amber-200 hover:bg-amber-700/15"
+                        type="button"
+                        onClick={() => disconnectUser(parsed.id)}
+                      >
+                        <UserMinus className="h-3.5 w-3.5" />
+                        Unconnect
+                      </button>
+                      <button
+                        className="inline-flex items-center gap-1 rounded-lg border border-rose-500/50 px-2.5 py-1 text-xs text-rose-200 hover:bg-rose-700/15"
+                        type="button"
+                        onClick={() => blockUser(parsed.id)}
+                      >
+                        <Ban className="h-3.5 w-3.5" />
+                        Block
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
         </div>
       </aside>
 

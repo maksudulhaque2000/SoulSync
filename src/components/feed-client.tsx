@@ -6,7 +6,7 @@ import Placeholder from "@tiptap/extension-placeholder";
 import StarterKit from "@tiptap/starter-kit";
 import TiptapImage from "@tiptap/extension-image";
 import { formatDistanceToNow } from "date-fns";
-import { AlignCenter, AlignLeft, AlignRight, CheckCircle2, Copy, Eye, EyeOff, FileText, HandHeart, Heart, ImagePlus, Lightbulb, MessageCircle, MoreHorizontal, PartyPopper, Pencil, Send, Share2, Sparkles, ThumbsUp, Trash2, Upload, UserPlus, X } from "lucide-react";
+import { AlignCenter, AlignLeft, AlignRight, Check, CheckCircle2, Copy, Eye, EyeOff, FileText, HandHeart, Heart, ImagePlus, Lightbulb, MessageCircle, MoreHorizontal, PartyPopper, Pencil, Send, Share2, Sparkles, ThumbsUp, Trash2, Upload, UserPlus, X } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import Image from "next/image";
 import Link from "next/link";
@@ -114,11 +114,14 @@ function textToHtml(text: string) {
 type Props = {
   initialPosts: Post[];
   suggestedUsers: SuggestedUser[];
+  incomingRequests?: SuggestedUser[];
   currentUserId: string;
 };
 
-export default function FeedClient({ initialPosts, suggestedUsers, currentUserId }: Props) {
+export default function FeedClient({ initialPosts, suggestedUsers, incomingRequests = [], currentUserId }: Props) {
   const [posts, setPosts] = useState(initialPosts);
+  const [sidebarSuggestions, setSidebarSuggestions] = useState(suggestedUsers);
+  const [sidebarIncomingRequests, setSidebarIncomingRequests] = useState(incomingRequests);
   const [uploading, setUploading] = useState(false);
   const [attachments, setAttachments] = useState<Media[]>([]);
   const [resizePx, setResizePx] = useState(1600);
@@ -527,6 +530,41 @@ export default function FeedClient({ initialPosts, suggestedUsers, currentUserId
 
     toast.success("Connection request sent");
     playActionSound("notification");
+    setSidebarSuggestions((prev) => prev.filter((user) => user._id !== targetUserId));
+  };
+
+  const acceptIncomingConnection = async (requesterId: string) => {
+    const res = await fetch("/api/connection/accept", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ requesterId }),
+    });
+
+    if (!res.ok) {
+      toast.error("Could not accept request");
+      return;
+    }
+
+    toast.success("Connection accepted");
+    playActionSound("notification");
+    setSidebarIncomingRequests((prev) => prev.filter((user) => user._id !== requesterId));
+  };
+
+  const rejectIncomingConnection = async (requesterId: string) => {
+    const res = await fetch("/api/connection/reject", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ requesterId }),
+    });
+
+    if (!res.ok) {
+      toast.error("Could not reject request");
+      return;
+    }
+
+    toast.success("Connection request rejected");
+    playActionSound("notification");
+    setSidebarIncomingRequests((prev) => prev.filter((user) => user._id !== requesterId));
   };
 
   const openPostEditor = (post: Post) => {
@@ -844,9 +882,73 @@ export default function FeedClient({ initialPosts, suggestedUsers, currentUserId
 
       <aside className="space-y-5">
         <div className="card-panel">
+          <h3 className="font-display text-xl">Connection Requests</h3>
+          <div className="mt-3 space-y-2">
+            {sidebarIncomingRequests.length === 0 ? (
+              <p className="text-sm text-slate-400">No pending requests.</p>
+            ) : (
+              sidebarIncomingRequests.map((user) => (
+                <div key={user._id} className="rounded-xl border border-slate-700/70 bg-slate-900/40 p-3">
+                  <div className="flex items-center gap-2">
+                    <Link
+                      href={`/profile/${user._id}`}
+                      className="inline-flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-700 bg-slate-800"
+                    >
+                      {user.avatar ? (
+                        <Image
+                          src={user.avatar}
+                          alt={`${user.firstName} ${user.lastName}`}
+                          width={40}
+                          height={40}
+                          unoptimized
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <span className="text-sm font-semibold text-slate-200">
+                          {`${user.firstName?.[0] ?? ""}${user.lastName?.[0] ?? ""}`.toUpperCase() || "U"}
+                        </span>
+                      )}
+                    </Link>
+
+                    <div className="min-w-0">
+                      <Link href={`/profile/${user._id}`} className="font-medium text-slate-200 transition hover:text-cyan-200">
+                        {user.firstName} {user.lastName}
+                      </Link>
+                      <p className="line-clamp-2 text-xs text-slate-400">{user.bio || "Wants to connect with you."}</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <button
+                      className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/50 px-2.5 py-1 text-xs text-emerald-200 hover:bg-emerald-700/15"
+                      onClick={() => acceptIncomingConnection(user._id)}
+                      type="button"
+                    >
+                      <Check className="h-3.5 w-3.5" />
+                      Accept
+                    </button>
+                    <button
+                      className="inline-flex items-center gap-1 rounded-lg border border-rose-500/50 px-2.5 py-1 text-xs text-rose-200 hover:bg-rose-700/15"
+                      onClick={() => rejectIncomingConnection(user._id)}
+                      type="button"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                      Reject
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="card-panel">
           <h3 className="font-display text-xl">People You May Connect</h3>
           <div className="mt-3 space-y-2">
-            {suggestedUsers.map((user) => (
+            {sidebarSuggestions.length === 0 ? (
+              <p className="text-sm text-slate-400">No new suggestions right now.</p>
+            ) : (
+            sidebarSuggestions.map((user) => (
               <div key={user._id} className="rounded-xl border border-slate-700/70 bg-slate-900/40 p-3">
                 <div className="flex items-center gap-2">
                   <Link
@@ -882,7 +984,8 @@ export default function FeedClient({ initialPosts, suggestedUsers, currentUserId
                   Request Connection
                 </button>
               </div>
-            ))}
+            ))
+            )}
           </div>
         </div>
       </aside>

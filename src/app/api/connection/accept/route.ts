@@ -55,7 +55,8 @@ export async function POST(req: Request) {
     type: "connection_accepted",
     title: "Connection accepted",
     body: `${session.user.firstName} accepted your connection request.`,
-    link: "/profile",
+    link: `/profile/${session.user.id}`,
+    meta: { from: session.user.id },
   });
 
   return NextResponse.json({ success: true });
