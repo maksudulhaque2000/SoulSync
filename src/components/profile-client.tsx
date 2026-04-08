@@ -3,7 +3,7 @@
 import { formatDistanceToNow } from "date-fns";
 import { Camera, Check, Eye, EyeOff, FileText, Pencil, Save, Trash2, Upload, UserCheck, X } from "lucide-react";
 import Image from "next/image";
-import { type ChangeEvent, useMemo, useState } from "react";
+import { type ChangeEvent, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
 
 import { playActionSound } from "@/components/sound";
@@ -92,12 +92,15 @@ export default function ProfileClient({ initialUser, initialPosts }: Props) {
   const [user, setUser] = useState(initialUser);
   const [posts, setPosts] = useState(initialPosts);
   const [saving, setSaving] = useState(false);
+  const [openProfileManageMenu, setOpenProfileManageMenu] = useState(false);
+  const [openProfileEditor, setOpenProfileEditor] = useState(false);
   const [workingPostId, setWorkingPostId] = useState<string | null>(null);
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const [editMedia, setEditMedia] = useState<Media[]>([]);
   const [editBackgroundColor, setEditBackgroundColor] = useState("#1e293b");
   const [editTextAlign, setEditTextAlign] = useState<"left" | "center" | "right">("left");
+  const avatarInputRef = useRef<HTMLInputElement>(null);
 
   const editingPost = useMemo(
     () => posts.find((post) => post._id === editingPostId) ?? null,
@@ -317,6 +320,7 @@ export default function ProfileClient({ initialUser, initialPosts }: Props) {
     setUser((prev) => ({ ...prev, ...data.user }));
     toast.success("Profile updated");
     playActionSound("success");
+    setOpenProfileEditor(false);
   };
 
   const acceptConnection = async (requesterId: string) => {
@@ -342,49 +346,6 @@ export default function ProfileClient({ initialUser, initialPosts }: Props) {
   return (
     <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-5 px-4 py-6 lg:grid-cols-[1.35fr_0.65fr]">
       <section className="space-y-5">
-        <article className="card-panel space-y-5">
-        <h1 className="font-display text-3xl">Profile Management</h1>
-        <div className="grid gap-4 md:grid-cols-2">
-          <label className="space-y-2 text-sm text-slate-300">
-            First name
-            <input className="auth-input" value={user.firstName} onChange={(e) => setUser((prev) => ({ ...prev, firstName: e.target.value }))} />
-          </label>
-          <label className="space-y-2 text-sm text-slate-300">
-            Last name
-            <input className="auth-input" value={user.lastName} onChange={(e) => setUser((prev) => ({ ...prev, lastName: e.target.value }))} />
-          </label>
-          <label className="space-y-2 text-sm text-slate-300 md:col-span-2">
-            Email (read only)
-            <input className="auth-input opacity-60" value={user.email} disabled />
-          </label>
-          <label className="space-y-2 text-sm text-slate-300">
-            Mobile
-            <input className="auth-input" value={user.phone || ""} onChange={(e) => setUser((prev) => ({ ...prev, phone: e.target.value }))} />
-          </label>
-          <label className="space-y-2 text-sm text-slate-300">
-            Age
-            <input className="auth-input" type="number" value={user.age || 0} onChange={(e) => setUser((prev) => ({ ...prev, age: Number(e.target.value) }))} />
-          </label>
-          <label className="space-y-2 text-sm text-slate-300">
-            Gender
-            <select className="auth-input" value={user.gender} onChange={(e) => setUser((prev) => ({ ...prev, gender: e.target.value as UserProfile["gender"] }))}>
-              <option value="male">Male</option>
-              <option value="female">Female</option>
-              <option value="non-binary">Non-binary</option>
-              <option value="prefer-not-to-say">Prefer not to say</option>
-            </select>
-          </label>
-          <label className="space-y-2 text-sm text-slate-300 md:col-span-2">
-            Bio
-            <textarea className="auth-input min-h-28" value={user.bio || ""} onChange={(e) => setUser((prev) => ({ ...prev, bio: e.target.value }))} />
-          </label>
-        </div>
-
-        <button className="auth-button" type="button" onClick={save} disabled={saving}>
-          {saving ? "Saving..." : "Save Profile"}
-        </button>
-        </article>
-
         <article className="card-panel">
           <div className="flex items-center justify-between gap-3">
             <h2 className="font-display text-2xl">Your Timeline</h2>
@@ -490,7 +451,47 @@ export default function ProfileClient({ initialUser, initialPosts }: Props) {
 
       <aside className="space-y-5">
         <div className="card-panel">
-          <p className="font-display text-xl">Avatar</p>
+          <div className="flex items-center justify-between gap-3">
+            <p className="font-display text-xl">Avatar</p>
+            <div className="relative">
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 rounded-lg border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-xs text-cyan-100 transition hover:bg-cyan-500/25"
+                onClick={() => setOpenProfileManageMenu((prev) => !prev)}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                Edit
+              </button>
+
+              {openProfileManageMenu ? (
+                <div className="absolute right-0 top-10 z-20 w-44 rounded-xl border border-slate-700 bg-slate-900/95 p-1.5 shadow-xl">
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-slate-200 transition hover:bg-slate-800"
+                    onClick={() => {
+                      setOpenProfileEditor(true);
+                      setOpenProfileManageMenu(false);
+                    }}
+                  >
+                    <Pencil className="h-4 w-4" />
+                    Edit profile
+                  </button>
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-slate-200 transition hover:bg-slate-800"
+                    onClick={() => {
+                      avatarInputRef.current?.click();
+                      setOpenProfileManageMenu(false);
+                    }}
+                  >
+                    <Camera className="h-4 w-4" />
+                    Change avatar
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          </div>
+
           <div className="mt-3 flex items-center gap-3">
             {user.avatar ? (
               <Image
@@ -504,11 +505,20 @@ export default function ProfileClient({ initialUser, initialPosts }: Props) {
             ) : (
               <div className="h-16 w-16 rounded-full bg-slate-800" />
             )}
-            <label className="upload-btn">
-              <Camera className="h-4 w-4" />
-              Change
-              <input type="file" className="hidden" accept="image/*" onChange={uploadAvatar} />
-            </label>
+            <p className="text-sm text-slate-400">Use the Edit button to manage profile details.</p>
+            <input ref={avatarInputRef} type="file" className="hidden" accept="image/*" onChange={uploadAvatar} />
+          </div>
+
+          <div className="mt-4 rounded-xl border border-slate-700/70 bg-slate-900/40 p-3">
+            <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Profile Details</p>
+            <div className="mt-2 space-y-2 text-sm">
+              <p className="text-slate-300"><span className="text-slate-500">Name:</span> {user.firstName} {user.lastName}</p>
+              <p className="text-slate-300"><span className="text-slate-500">Email:</span> {user.email || "Not set"}</p>
+              <p className="text-slate-300"><span className="text-slate-500">Mobile:</span> {user.phone || "Not set"}</p>
+              <p className="text-slate-300"><span className="text-slate-500">Age:</span> {user.age && user.age > 0 ? user.age : "Not set"}</p>
+              <p className="text-slate-300"><span className="text-slate-500">Gender:</span> {user.gender || "Not set"}</p>
+              <p className="text-slate-300"><span className="text-slate-500">Bio:</span> {user.bio || "Not set"}</p>
+            </div>
           </div>
         </div>
 
@@ -664,6 +674,69 @@ export default function ProfileClient({ initialUser, initialPosts }: Props) {
               <button className="auth-button h-11" type="button" onClick={() => void savePostEdit()} disabled={workingPostId === editingPostId}>
                 <Save className="mr-1 h-4 w-4" />
                 {workingPostId === editingPostId ? "Saving..." : "Save Changes"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {openProfileEditor ? (
+        <div className="fixed inset-0 z-90 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
+          <div className="hide-scrollbar card-panel max-h-[92vh] w-full max-w-3xl overflow-y-auto">
+            <div className="mb-4 flex items-center justify-between gap-2">
+              <h3 className="font-display text-2xl">Profile Management</h3>
+              <button
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-700 bg-slate-900/70"
+                type="button"
+                onClick={() => setOpenProfileEditor(false)}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="space-y-2 text-sm text-slate-300">
+                First name
+                <input className="auth-input" value={user.firstName} onChange={(e) => setUser((prev) => ({ ...prev, firstName: e.target.value }))} />
+              </label>
+              <label className="space-y-2 text-sm text-slate-300">
+                Last name
+                <input className="auth-input" value={user.lastName} onChange={(e) => setUser((prev) => ({ ...prev, lastName: e.target.value }))} />
+              </label>
+              <label className="space-y-2 text-sm text-slate-300 md:col-span-2">
+                Email (read only)
+                <input className="auth-input opacity-60" value={user.email} disabled />
+              </label>
+              <label className="space-y-2 text-sm text-slate-300">
+                Mobile
+                <input className="auth-input" value={user.phone || ""} onChange={(e) => setUser((prev) => ({ ...prev, phone: e.target.value }))} />
+              </label>
+              <label className="space-y-2 text-sm text-slate-300">
+                Age
+                <input className="auth-input" type="number" value={user.age || 0} onChange={(e) => setUser((prev) => ({ ...prev, age: Number(e.target.value) }))} />
+              </label>
+              <label className="space-y-2 text-sm text-slate-300">
+                Gender
+                <select className="auth-input" value={user.gender} onChange={(e) => setUser((prev) => ({ ...prev, gender: e.target.value as UserProfile["gender"] }))}>
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                  <option value="non-binary">Non-binary</option>
+                  <option value="prefer-not-to-say">Prefer not to say</option>
+                </select>
+              </label>
+              <label className="space-y-2 text-sm text-slate-300 md:col-span-2">
+                Bio
+                <textarea className="auth-input min-h-28" value={user.bio || ""} onChange={(e) => setUser((prev) => ({ ...prev, bio: e.target.value }))} />
+              </label>
+            </div>
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button className="icon-btn" type="button" onClick={() => setOpenProfileEditor(false)}>
+                Cancel
+              </button>
+              <button className="auth-button h-11" type="button" onClick={save} disabled={saving}>
+                <Save className="mr-1 h-4 w-4" />
+                {saving ? "Saving..." : "Save Profile"}
               </button>
             </div>
           </div>

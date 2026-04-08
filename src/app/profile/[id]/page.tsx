@@ -62,7 +62,7 @@ export default async function PublicProfilePage({ params }: { params: Promise<{ 
   await connectDB();
 
   const userRaw = await User.findById(id)
-    .select("firstName lastName avatar bio")
+    .select("firstName lastName email avatar phone age gender bio")
     .lean();
 
   if (!userRaw) {
@@ -115,6 +115,18 @@ export default async function PublicProfilePage({ params }: { params: Promise<{ 
             >
               Back to home
             </Link>
+          </div>
+
+          <div className="mt-4 rounded-xl border border-slate-700/70 bg-slate-900/40 p-3">
+            <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Profile Details</p>
+            <div className="mt-2 grid gap-2 text-sm text-slate-300 sm:grid-cols-2">
+              <p><span className="text-slate-500">Name:</span> {user.firstName} {user.lastName}</p>
+              <p><span className="text-slate-500">Email:</span> {user.email || "Not set"}</p>
+              <p><span className="text-slate-500">Mobile:</span> {user.phone || "Not set"}</p>
+              <p><span className="text-slate-500">Age:</span> {user.age && user.age > 0 ? user.age : "Not set"}</p>
+              <p><span className="text-slate-500">Gender:</span> {user.gender || "Not set"}</p>
+              <p className="sm:col-span-2"><span className="text-slate-500">Bio:</span> {user.bio || "Not set"}</p>
+            </div>
           </div>
         </section>
 
