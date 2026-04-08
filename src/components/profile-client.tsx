@@ -3,10 +3,18 @@
 import { formatDistanceToNow } from "date-fns";
 import { Camera, Check, Eye, EyeOff, FileText, Pencil, Save, Trash2, Upload, UserCheck, X } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
 import { type ChangeEvent, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
 
 import { playActionSound } from "@/components/sound";
+
+type PendingRequester = {
+  _id: string;
+  firstName?: string;
+  lastName?: string;
+  avatar?: string;
+};
 
 type UserProfile = {
   _id: string;
@@ -19,7 +27,7 @@ type UserProfile = {
   birthDate?: string;
   gender: "male" | "female" | "non-binary" | "prefer-not-to-say";
   bio?: string;
-  pendingReceived?: string[];
+  pendingReceived?: Array<string | PendingRequester>;
   connections?: string[];
 };
 
@@ -109,6 +117,26 @@ function calculateAgeFromBirthDate(birthDate: string | undefined) {
 function formatBirthDateForInput(birthDate: string | undefined) {
   if (!birthDate) return "";
   return birthDate.length >= 10 ? birthDate.slice(0, 10) : birthDate;
+}
+
+function parseRequester(requester: string | PendingRequester) {
+  if (typeof requester === "string") {
+    return {
+      id: requester,
+      firstName: "Unknown",
+      lastName: "User",
+      avatar: "",
+      isFallback: true,
+    };
+  }
+
+  return {
+    id: requester._id,
+    firstName: requester.firstName || "Unknown",
+    lastName: requester.lastName || "User",
+    avatar: requester.avatar || "",
+    isFallback: false,
+  };
 }
 
 export default function ProfileClient({ initialUser, initialPosts }: Props) {
@@ -367,6 +395,26 @@ export default function ProfileClient({ initialUser, initialPosts }: Props) {
     setUser(data.user);
   };
 
+  const rejectConnection = async (requesterId: string) => {
+    const res = await fetch("/api/connection/reject", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ requesterId }),
+    });
+
+    if (!res.ok) {
+      toast.error("Could not reject request");
+      return;
+    }
+
+    toast.success("Connection request rejected");
+    playActionSound("notification");
+
+    const refetch = await fetch("/api/profile", { cache: "no-store" });
+    const data = await refetch.json();
+    setUser(data.user);
+  };
+
   return (
     <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-5 px-4 py-6 lg:grid-cols-[1.35fr_0.65fr]">
       <section className="space-y-5">
@@ -553,15 +601,50 @@ export default function ProfileClient({ initialUser, initialPosts }: Props) {
             {(user.pendingReceived || []).length === 0 ? (
               <p className="text-sm text-slate-400">No pending requests.</p>
             ) : (
-              (user.pendingReceived || []).map((id) => (
-                <div key={id} className="rounded-xl border border-slate-700 bg-slate-900/40 p-2">
-                  <p className="text-sm text-slate-300">Requester ID: {id}</p>
-                  <button className="mt-2 inline-flex items-center gap-1 rounded-lg border border-emerald-500/50 px-2.5 py-1 text-xs text-emerald-200 hover:bg-emerald-700/15" type="button" onClick={() => acceptConnection(id)}>
-                    <Check className="h-3.5 w-3.5" />
-                    Accept
-                  </button>
+              (user.pendingReceived || []).map((requester) => {
+                const parsed = parseRequester(requester);
+                const initials = `${parsed.firstName?.[0] ?? ""}${parsed.lastName?.[0] ?? ""}`.toUpperCase() || "U";
+
+                return (
+                <div key={parsed.id} className="rounded-xl border border-slate-700 bg-slate-900/40 p-2">
+                  <Link href={`/profile/${parsed.id}`} className="flex items-center gap-2 rounded-lg p-1 transition hover:bg-slate-800/70">
+                    {parsed.avatar ? (
+                      <Image
+                        src={parsed.avatar}
+                        alt={`${parsed.firstName} ${parsed.lastName}`}
+                        width={36}
+                        height={36}
+                        unoptimized
+                        className="h-9 w-9 rounded-full border border-slate-700 object-cover"
+                      />
+                    ) : (
+                      <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-700 bg-slate-800 text-xs font-semibold text-slate-200">
+                        {initials}
+                      </span>
+                    )}
+
+                    <span className="text-sm text-slate-200">
+                      {parsed.firstName} {parsed.lastName}
+                    </span>
+                  </Link>
+
+                  {parsed.isFallback ? (
+                    <p className="mt-1 px-1 text-xs text-slate-500">User details are not available for this request.</p>
+                  ) : null}
+
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <button className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/50 px-2.5 py-1 text-xs text-emerald-200 hover:bg-emerald-700/15" type="button" onClick={() => acceptConnection(parsed.id)}>
+                      <Check className="h-3.5 w-3.5" />
+                      Accept
+                    </button>
+                    <button className="inline-flex items-center gap-1 rounded-lg border border-rose-500/50 px-2.5 py-1 text-xs text-rose-200 hover:bg-rose-700/15" type="button" onClick={() => rejectConnection(parsed.id)}>
+                      <X className="h-3.5 w-3.5" />
+                      Reject
+                    </button>
+                  </div>
                 </div>
-              ))
+              );
+              })
             )}
           </div>
         </div>

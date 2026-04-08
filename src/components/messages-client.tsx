@@ -25,10 +25,16 @@ type Message = {
 type Props = {
   currentUserId: string;
   contacts: Contact[];
+  initialSelectedId?: string;
 };
 
-export default function MessagesClient({ currentUserId, contacts }: Props) {
-  const [selectedId, setSelectedId] = useState<string>(contacts[0]?._id ?? "");
+export default function MessagesClient({ currentUserId, contacts, initialSelectedId }: Props) {
+  const [selectedId, setSelectedId] = useState<string>(() => {
+    if (initialSelectedId && contacts.some((contact) => contact._id === initialSelectedId)) {
+      return initialSelectedId;
+    }
+    return contacts[0]?._id ?? "";
+  });
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
   const [recording, setRecording] = useState(false);
@@ -45,6 +51,17 @@ export default function MessagesClient({ currentUserId, contacts }: Props) {
     const data = await res.json();
     setMessages(data.messages ?? []);
   };
+
+  useEffect(() => {
+    if (initialSelectedId && contacts.some((contact) => contact._id === initialSelectedId)) {
+      setSelectedId(initialSelectedId);
+      return;
+    }
+
+    if (!contacts.some((contact) => contact._id === selectedId)) {
+      setSelectedId(contacts[0]?._id ?? "");
+    }
+  }, [contacts, initialSelectedId, selectedId]);
 
   useEffect(() => {
     if (!selectedId) return;

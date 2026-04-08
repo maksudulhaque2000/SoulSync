@@ -23,7 +23,7 @@ export default async function FeedPage() {
     .lean();
 
   const usersRaw = await User.find({ _id: { $ne: session.user.id } })
-    .select("firstName lastName bio")
+    .select("firstName lastName bio avatar")
     .sort({ createdAt: -1 })
     .limit(8)
     .lean();

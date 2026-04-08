@@ -6,11 +6,17 @@ import { getAuthSession } from "@/lib/auth";
 import { connectDB } from "@/lib/db";
 import User from "@/models/User";
 
-export default async function MessagesPage() {
+type SearchParams = {
+  userId?: string;
+};
+
+export default async function MessagesPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const session = await getAuthSession();
   if (!session?.user?.id) {
     redirect("/");
   }
+
+  const { userId } = await searchParams;
 
   await connectDB();
 
@@ -20,12 +26,27 @@ export default async function MessagesPage() {
     .limit(20)
     .lean();
 
-  const users = JSON.parse(JSON.stringify(usersRaw));
+  let users = JSON.parse(JSON.stringify(usersRaw)) as Array<{
+    _id: string;
+    firstName: string;
+    lastName: string;
+  }>;
+
+  if (userId && !users.some((user) => user._id === userId)) {
+    const selectedUserRaw = await User.findById(userId)
+      .select("firstName lastName")
+      .lean();
+
+    if (selectedUserRaw) {
+      const selectedUser = JSON.parse(JSON.stringify(selectedUserRaw));
+      users = [selectedUser, ...users];
+    }
+  }
 
   return (
     <main className="min-h-svh bg-site-gradient pb-8">
       <TopNav fullName={`${session.user.firstName} ${session.user.lastName}`} />
-      <MessagesClient currentUserId={session.user.id} contacts={users} />
+      <MessagesClient currentUserId={session.user.id} contacts={users} initialSelectedId={userId} />
     </main>
   );
 }

@@ -1,9 +1,9 @@
 import { formatDistanceToNow } from "date-fns";
 import { FileText } from "lucide-react";
 import Image from "next/image";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import PublicProfileActions from "@/components/public-profile-actions";
 import TopNav from "@/components/top-nav";
 import { getAuthSession } from "@/lib/auth";
 import { connectDB } from "@/lib/db";
@@ -64,6 +64,10 @@ function calculateAgeFromBirthDate(birthDate: string | undefined) {
   return age >= 0 ? age : null;
 }
 
+function hasRelation(ids: string[] | undefined, targetId: string) {
+  return Boolean(ids?.includes(targetId));
+}
+
 export default async function PublicProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const session = await getAuthSession();
   if (!session?.user?.id) {
@@ -82,7 +86,11 @@ export default async function PublicProfilePage({ params }: { params: Promise<{ 
     .select("firstName lastName email avatar phone age birthDate gender bio")
     .lean();
 
-  if (!userRaw) {
+  const meRaw = await User.findById(session.user.id)
+    .select("connections pendingSent pendingReceived")
+    .lean();
+
+  if (!userRaw || !meRaw) {
     redirect("/");
   }
 
@@ -94,8 +102,16 @@ export default async function PublicProfilePage({ params }: { params: Promise<{ 
     .lean();
 
   const user = JSON.parse(JSON.stringify(userRaw));
+  const me = JSON.parse(JSON.stringify(meRaw)) as {
+    connections?: string[];
+    pendingSent?: string[];
+    pendingReceived?: string[];
+  };
   const posts = JSON.parse(JSON.stringify(postsRaw));
   const initials = `${user.firstName?.[0] ?? ""}${user.lastName?.[0] ?? ""}`.toUpperCase();
+  const isConnected = hasRelation(me.connections, id);
+  const hasPendingSent = hasRelation(me.pendingSent, id);
+  const hasPendingReceived = hasRelation(me.pendingReceived, id);
 
   return (
     <main className="min-h-svh bg-site-gradient pb-8">
@@ -126,12 +142,14 @@ export default async function PublicProfilePage({ params }: { params: Promise<{ 
               </div>
             </div>
 
-            <Link
-              href="/"
-              className="inline-flex items-center rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-2 text-sm text-slate-200 transition hover:bg-slate-800"
-            >
-              Back to home
-            </Link>
+            <div className="flex flex-col items-end gap-2">
+              <PublicProfileActions
+                targetUserId={id}
+                isConnected={isConnected}
+                hasPendingSent={hasPendingSent}
+                hasPendingReceived={hasPendingReceived}
+              />
+            </div>
           </div>
 
           <div className="mt-4 rounded-xl border border-slate-700/70 bg-slate-900/40 p-3">

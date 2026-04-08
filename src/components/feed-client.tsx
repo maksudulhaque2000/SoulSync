@@ -49,6 +49,7 @@ type SuggestedUser = {
   firstName: string;
   lastName: string;
   bio?: string;
+  avatar?: string;
 };
 
 const reactionOptions = [
@@ -847,8 +848,35 @@ export default function FeedClient({ initialPosts, suggestedUsers, currentUserId
           <div className="mt-3 space-y-2">
             {suggestedUsers.map((user) => (
               <div key={user._id} className="rounded-xl border border-slate-700/70 bg-slate-900/40 p-3">
-                <p className="font-medium text-slate-200">{user.firstName} {user.lastName}</p>
-                <p className="line-clamp-2 text-xs text-slate-400">{user.bio || "A meaningful SoulSync member."}</p>
+                <div className="flex items-center gap-2">
+                  <Link
+                    href={`/profile/${user._id}`}
+                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-700 bg-slate-800"
+                  >
+                    {user.avatar ? (
+                      <Image
+                        src={user.avatar}
+                        alt={`${user.firstName} ${user.lastName}`}
+                        width={40}
+                        height={40}
+                        unoptimized
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <span className="text-sm font-semibold text-slate-200">
+                        {`${user.firstName?.[0] ?? ""}${user.lastName?.[0] ?? ""}`.toUpperCase() || "U"}
+                      </span>
+                    )}
+                  </Link>
+
+                  <div className="min-w-0">
+                    <Link href={`/profile/${user._id}`} className="font-medium text-slate-200 transition hover:text-cyan-200">
+                      {user.firstName} {user.lastName}
+                    </Link>
+                    <p className="line-clamp-2 text-xs text-slate-400">{user.bio || "A meaningful SoulSync member."}</p>
+                  </div>
+                </div>
+
                 <button className="mt-2 inline-flex items-center gap-1 rounded-lg border border-cyan-500/50 px-2.5 py-1 text-xs text-cyan-200 hover:bg-cyan-600/10" onClick={() => sendConnection(user._id)} type="button">
                   <UserPlus className="h-3.5 w-3.5" />
                   Request Connection
