@@ -66,7 +66,7 @@ export default async function PublicProfilePage({ params }: { params: Promise<{ 
     .lean();
 
   if (!userRaw) {
-    redirect("/feed");
+    redirect("/");
   }
 
   const postsRaw = await Post.find({ author: id, isHidden: { $ne: true } })
@@ -110,10 +110,10 @@ export default async function PublicProfilePage({ params }: { params: Promise<{ 
             </div>
 
             <Link
-              href="/feed"
+              href="/"
               className="inline-flex items-center rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-2 text-sm text-slate-200 transition hover:bg-slate-800"
             >
-              Back to feed
+              Back to home
             </Link>
           </div>
         </section>

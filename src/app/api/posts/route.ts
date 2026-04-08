@@ -72,7 +72,7 @@ export async function POST(req: Request) {
     type: "system",
     title: "Post published",
     body: "Your thought has been shared to SoulSync feed.",
-    link: `/feed?post=${post._id.toString()}`,
+    link: `/?post=${post._id.toString()}`,
   });
 
   return NextResponse.json({ post }, { status: 201 });

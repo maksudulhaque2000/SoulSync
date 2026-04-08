@@ -1,6 +1,6 @@
 "use client";
 
-import { LogOut, MessageCircle, Newspaper, UserCircle2 } from "lucide-react";
+import { LogOut, MessageCircle, UserCircle2 } from "lucide-react";
 import { signOut } from "next-auth/react";
 import Link from "next/link";
 
@@ -14,16 +14,12 @@ export default function TopNav({ fullName }: NavProps) {
   return (
     <header className="sticky top-0 z-30 border-b border-slate-800 bg-slate-950/80 backdrop-blur-xl">
       <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-3">
-        <div>
+        <Link href="/" className="rounded-md transition hover:opacity-90">
           <p className="font-display text-xl font-bold tracking-wide">SoulSync</p>
           <p className="text-xs text-slate-400">Hi, {fullName}</p>
-        </div>
+        </Link>
 
         <nav className="flex items-center gap-2">
-          <Link href="/feed" className="nav-item">
-            <Newspaper className="h-4 w-4" />
-            Feed
-          </Link>
           <Link href="/messages" className="nav-item">
             <MessageCircle className="h-4 w-4" />
             Messages

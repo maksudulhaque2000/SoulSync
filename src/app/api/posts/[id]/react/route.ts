@@ -51,7 +51,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         type: "post_reaction",
         title: "New reaction",
         body: `${session.user.firstName} reacted to your post with ${parsed.data.type}.`,
-        link: `/feed?post=${id}`,
+        link: `/?post=${id}`,
       });
     }
   }

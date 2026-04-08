@@ -44,7 +44,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       type: "post_comment",
       title: "New comment",
       body: `${session.user.firstName} commented on your post.`,
-      link: `/feed?post=${id}`,
+      link: `/?post=${id}`,
     });
   }
 

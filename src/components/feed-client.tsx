@@ -190,7 +190,7 @@ export default function FeedClient({ initialPosts, suggestedUsers, currentUserId
   const activeShareLink = useMemo(
     () =>
       openSharePostId && typeof window !== "undefined"
-        ? `${window.location.origin}/feed?post=${openSharePostId}`
+        ? `${window.location.origin}/?post=${openSharePostId}`
         : "",
     [openSharePostId]
   );
@@ -463,7 +463,7 @@ export default function FeedClient({ initialPosts, suggestedUsers, currentUserId
   };
 
   const sharePost = async (postId: string) => {
-    const link = `${window.location.origin}/feed?post=${postId}`;
+    const link = `${window.location.origin}/?post=${postId}`;
 
     await navigator.clipboard.writeText(link);
     toast.success("Post link copied");
@@ -471,7 +471,7 @@ export default function FeedClient({ initialPosts, suggestedUsers, currentUserId
   };
 
   const shareToPlatform = (postId: string, platform: "facebook" | "linkedin" | "x" | "whatsapp") => {
-    const link = `${window.location.origin}/feed?post=${postId}`;
+    const link = `${window.location.origin}/?post=${postId}`;
     const encodedUrl = encodeURIComponent(link);
     const encodedText = encodeURIComponent("Read this SoulSync post");
 
@@ -497,7 +497,7 @@ export default function FeedClient({ initialPosts, suggestedUsers, currentUserId
   };
 
   const nativeSharePost = async (postId: string) => {
-    const link = `${window.location.origin}/feed?post=${postId}`;
+    const link = `${window.location.origin}/?post=${postId}`;
     if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
       try {
         await navigator.share({ title: "SoulSync Post", text: "Read this SoulSync post", url: link });
