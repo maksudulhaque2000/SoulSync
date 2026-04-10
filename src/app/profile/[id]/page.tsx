@@ -1,9 +1,8 @@
-import { formatDistanceToNow } from "date-fns";
-import { FileText } from "lucide-react";
 import Image from "next/image";
 import { redirect } from "next/navigation";
 
 import PublicProfileActions from "@/components/public-profile-actions";
+import PublicProfilePostsClient from "@/components/public-profile-posts-client";
 import TopNav from "@/components/top-nav";
 import { getAuthSession } from "@/lib/auth";
 import { connectDB } from "@/lib/db";
@@ -25,27 +24,21 @@ type PublicPost = {
     textAlign?: "left" | "center" | "right";
   };
   media?: PublicMedia[];
+  reactions: {
+    user: { _id: string };
+    type: "love" | "care" | "celebrate" | "insightful" | "support";
+  }[];
+  comments: {
+    user: { _id: string; firstName: string; lastName: string };
+    text: string;
+    createdAt: string;
+  }[];
   author: {
+    _id: string;
     firstName: string;
     lastName: string;
   };
 };
-
-function normalizeHexColor(value: string | undefined) {
-  if (!value) return null;
-  return /^#[0-9a-fA-F]{6}$/.test(value) ? value : null;
-}
-
-function getReadableTextColor(hexColor: string) {
-  const normalized = normalizeHexColor(hexColor);
-  if (!normalized) return "#e2e8f0";
-
-  const r = Number.parseInt(normalized.slice(1, 3), 16);
-  const g = Number.parseInt(normalized.slice(3, 5), 16);
-  const b = Number.parseInt(normalized.slice(5, 7), 16);
-  const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-  return brightness > 160 ? "#0f172a" : "#e2e8f0";
-}
 
 function calculateAgeFromBirthDate(birthDate: string | undefined) {
   if (!birthDate) return null;
@@ -166,69 +159,7 @@ export default async function PublicProfilePage({ params }: { params: Promise<{ 
           </div>
         </section>
 
-        <section className="space-y-4">
-          {posts.length ? (
-            posts.map((post: PublicPost) => {
-              const postBackgroundColor = normalizeHexColor(post.textStyle?.backgroundColor) ?? "#1e293b";
-              const postTextColor = getReadableTextColor(postBackgroundColor);
-
-              return (
-                <article key={post._id} className="card-panel">
-                  <div className="mb-3 flex items-center justify-between text-sm text-slate-300">
-                    <p>{post.author.firstName} {post.author.lastName}</p>
-                    <p>{formatDistanceToNow(new Date(post.createdAt), { addSuffix: true })}</p>
-                  </div>
-
-                  <div
-                    className="prose max-w-none rounded-xl px-4 py-3 shadow-inner **:text-inherit"
-                    style={{
-                      backgroundColor: postBackgroundColor,
-                      color: postTextColor,
-                      textAlign: post.textStyle?.textAlign ?? "left",
-                    }}
-                    dangerouslySetInnerHTML={{ __html: post.content }}
-                  />
-
-                  {post.media?.length ? (
-                    <div className="mt-4 space-y-2">
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        {post.media
-                          .filter((media) => media.type === "image")
-                          .map((media) => (
-                            <Image
-                              key={media.url}
-                              src={media.url}
-                              alt={media.name ?? "post image"}
-                              width={1400}
-                              height={900}
-                              unoptimized
-                              className="h-auto max-h-136 w-full rounded-xl bg-slate-950/70 object-contain"
-                            />
-                          ))}
-                      </div>
-
-                      {post.media
-                        .filter((media) => media.type === "pdf")
-                        .map((media) => (
-                          <a
-                            key={media.url}
-                            href={media.url}
-                            target="_blank"
-                            className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-1.5 text-sm hover:bg-slate-800"
-                          >
-                            <FileText className="h-4 w-4" />
-                            {media.name ?? "PDF attachment"}
-                          </a>
-                        ))}
-                    </div>
-                  ) : null}
-                </article>
-              );
-            })
-          ) : (
-            <div className="card-panel text-sm text-slate-400">No public posts from this user yet.</div>
-          )}
-        </section>
+        <PublicProfilePostsClient initialPosts={posts as PublicPost[]} currentUserId={session.user.id} />
       </div>
     </main>
   );
