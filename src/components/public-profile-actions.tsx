@@ -235,7 +235,7 @@ export default function PublicProfileActions(props: Props) {
           disabled={state !== "none" || sending}
           className="inline-flex items-center gap-1 rounded-lg border border-cyan-500/50 px-3 py-2 text-sm text-cyan-200 transition hover:bg-cyan-600/10 disabled:cursor-not-allowed disabled:opacity-70"
         >
-          {state === "connected" ? <CheckCircle2 className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
+          <UserPlus className="h-4 w-4" />
           {connectionLabel}
         </button>
       )}
