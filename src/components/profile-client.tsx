@@ -651,7 +651,10 @@ export default function ProfileClient({ initialUser, initialPosts }: Props) {
             ) : (
               <div className="h-16 w-16 rounded-full bg-slate-800" />
             )}
-            <p className="text-sm text-slate-400">Use the Edit button to manage profile details.</p>
+            <div>
+              <p className="font-display text-lg text-slate-100">{user.firstName} {user.lastName}</p>
+              <p className="text-sm text-slate-400">Shape your profile story with the Edit button.</p>
+            </div>
             <input ref={avatarInputRef} type="file" className="hidden" accept="image/*" onChange={uploadAvatar} />
           </div>
 

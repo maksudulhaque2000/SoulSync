@@ -5,7 +5,7 @@ import { Copy, FileText, HandHeart, Heart, Lightbulb, MessageCircle, PartyPopper
 import { AnimatePresence, motion } from "framer-motion";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 
 import { playActionSound } from "@/components/sound";
@@ -85,6 +85,10 @@ export default function PublicProfilePostsClient({ initialPosts, currentUserId }
   const [openReactionPostId, setOpenReactionPostId] = useState<string | null>(null);
   const [openCommentPostId, setOpenCommentPostId] = useState<string | null>(null);
   const [openSharePostId, setOpenSharePostId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPosts(initialPosts);
+  }, [initialPosts]);
 
   const activeSharePost = useMemo(
     () => posts.find((post) => post._id === openSharePostId) ?? null,
@@ -205,6 +209,14 @@ export default function PublicProfilePostsClient({ initialPosts, currentUserId }
         const postBackgroundColor = normalizeHexColor(post.textStyle?.backgroundColor) ?? "#1e293b";
         const postTextColor = getReadableTextColor(postBackgroundColor);
         const myReaction = post.reactions.find((reaction) => reaction.user?._id === currentUserId)?.type;
+        const reactionCounts = post.reactions.reduce<Record<string, number>>((acc, reaction) => {
+          acc[reaction.type] = (acc[reaction.type] ?? 0) + 1;
+          return acc;
+        }, {});
+        const topReactionTypes = Object.entries(reactionCounts)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 3)
+          .map(([type]) => type);
 
         return (
           <article key={post._id} className="card-panel">
@@ -254,6 +266,29 @@ export default function PublicProfilePostsClient({ initialPosts, currentUserId }
                       {media.name ?? "PDF attachment"}
                     </a>
                   ))}
+              </div>
+            ) : null}
+
+            {post.reactions.length ? (
+              <div className="mt-3 flex items-center gap-2 text-xs text-slate-300">
+                <div className="flex items-center">
+                  {topReactionTypes.map((type, index) => {
+                    const option = reactionOptions.find((item) => item.type === type);
+                    if (!option) return null;
+                    const Icon = option.icon;
+
+                    return (
+                      <span
+                        key={`${post._id}-summary-${type}`}
+                        className={`inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-700 bg-slate-900 ${option.color} ${index > 0 ? "-ml-1" : ""}`}
+                        title={option.label}
+                      >
+                        <Icon className="h-3 w-3" />
+                      </span>
+                    );
+                  })}
+                </div>
+                <span>{post.reactions.length} reactions</span>
               </div>
             ) : null}
 
