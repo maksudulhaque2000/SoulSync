@@ -1,6 +1,6 @@
 "use client";
 
-import { formatDistanceToNow } from "date-fns";
+import { format } from "date-fns";
 import { Ban, Camera, Check, Eye, EyeOff, FileText, Pencil, Save, Trash2, Upload, UserCheck, UserMinus, X } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -84,6 +84,10 @@ function getReadableTextColor(hexColor: string) {
   const b = Number.parseInt(normalized.slice(5, 7), 16);
   const brightness = (r * 299 + g * 587 + b * 114) / 1000;
   return brightness > 160 ? "#0f172a" : "#e2e8f0";
+}
+
+function formatPostDate(dateString: string) {
+  return format(new Date(dateString), "dd MMM yyyy");
 }
 
 function htmlToText(html: string) {
@@ -511,7 +515,7 @@ export default function ProfileClient({ initialUser, initialPosts }: Props) {
                 return (
                   <div key={post._id} className="rounded-2xl border border-slate-700/70 bg-slate-900/35 p-4">
                     <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
-                      <p>{formatDistanceToNow(new Date(post.createdAt), { addSuffix: true })}</p>
+                      <p>{formatPostDate(post.createdAt)}</p>
                       <span className={`rounded-full border px-2 py-0.5 ${post.isHidden ? "border-amber-500/50 bg-amber-500/15 text-amber-200" : "border-emerald-500/50 bg-emerald-500/15 text-emerald-200"}`}>
                         {post.isHidden ? "Hidden" : "Visible"}
                       </span>

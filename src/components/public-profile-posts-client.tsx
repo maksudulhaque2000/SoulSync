@@ -1,6 +1,6 @@
 "use client";
 
-import { formatDistanceToNow } from "date-fns";
+import { format } from "date-fns";
 import { Copy, FileText, HandHeart, Heart, Lightbulb, MessageCircle, PartyPopper, Send, Share2, ThumbsUp } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import Image from "next/image";
@@ -76,6 +76,10 @@ function getReadableTextColor(hexColor: string) {
 
 function htmlToText(html: string) {
   return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function formatPostDate(dateString: string) {
+  return format(new Date(dateString), "dd MMM yyyy");
 }
 
 export default function PublicProfilePostsClient({ initialPosts, currentUserId }: Props) {
@@ -222,7 +226,7 @@ export default function PublicProfilePostsClient({ initialPosts, currentUserId }
           <article key={post._id} className="card-panel">
             <div className="mb-3 flex items-center justify-between text-sm text-slate-300">
               <p>{post.author.firstName} {post.author.lastName}</p>
-              <p>{formatDistanceToNow(new Date(post.createdAt), { addSuffix: true })}</p>
+              <p>{formatPostDate(post.createdAt)}</p>
             </div>
 
             <div

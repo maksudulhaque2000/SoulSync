@@ -5,7 +5,7 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import Placeholder from "@tiptap/extension-placeholder";
 import StarterKit from "@tiptap/starter-kit";
 import TiptapImage from "@tiptap/extension-image";
-import { formatDistanceToNow } from "date-fns";
+import { format } from "date-fns";
 import { AlignCenter, AlignLeft, AlignRight, Check, CheckCircle2, Copy, Eye, EyeOff, FileText, HandHeart, Heart, ImagePlus, Lightbulb, MessageCircle, MoreHorizontal, PartyPopper, Pencil, Send, Share2, Sparkles, ThumbsUp, Trash2, Upload, UserPlus, X } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import Image from "next/image";
@@ -109,6 +109,10 @@ function textToHtml(text: string) {
   const nonEmpty = lines.filter((line) => line.trim().length > 0);
   if (!nonEmpty.length) return "";
   return nonEmpty.map((line) => `<p>${escapeHtml(line)}</p>`).join("");
+}
+
+function formatPostDate(dateString: string) {
+  return format(new Date(dateString), "dd MMM yyyy");
 }
 
 type Props = {
@@ -713,7 +717,7 @@ export default function FeedClient({ initialPosts, suggestedUsers, incomingReque
                 </Link>
 
                 <div className="flex items-center gap-2">
-                  <p>{formatDistanceToNow(new Date(post.createdAt), { addSuffix: true })}</p>
+                  <p>{formatPostDate(post.createdAt)}</p>
                   {isOwner ? (
                     <div className="relative">
                       <button
@@ -1041,7 +1045,7 @@ export default function FeedClient({ initialPosts, suggestedUsers, incomingReque
               <div className="mb-3 flex items-center justify-between text-sm text-slate-300">
                 <p>{activeFocusPost.author.firstName} {activeFocusPost.author.lastName}</p>
                 <div className="inline-flex items-center gap-2">
-                  <p>{formatDistanceToNow(new Date(activeFocusPost.createdAt), { addSuffix: true })}</p>
+                  <p>{formatPostDate(activeFocusPost.createdAt)}</p>
                   <button
                     className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-slate-900/70 text-slate-300 transition hover:bg-slate-800"
                     type="button"
