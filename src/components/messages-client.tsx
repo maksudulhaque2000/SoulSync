@@ -29,18 +29,23 @@ type Props = {
 };
 
 export default function MessagesClient({ currentUserId, contacts, initialSelectedId }: Props) {
-  const [selectedId, setSelectedId] = useState<string>(() => {
-    if (initialSelectedId && contacts.some((contact) => contact._id === initialSelectedId)) {
-      return initialSelectedId;
-    }
-    return contacts[0]?._id ?? "";
-  });
+  const [manualSelectedId, setManualSelectedId] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
   const [recording, setRecording] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const audioChunks = useRef<Blob[]>([]);
+
+  const selectedId = useMemo(() => {
+    if (manualSelectedId && contacts.some((contact) => contact._id === manualSelectedId)) {
+      return manualSelectedId;
+    }
+    if (initialSelectedId && contacts.some((contact) => contact._id === initialSelectedId)) {
+      return initialSelectedId;
+    }
+    return contacts[0]?._id ?? "";
+  }, [contacts, initialSelectedId, manualSelectedId]);
 
   const selectedUser = useMemo(() => contacts.find((c) => c._id === selectedId), [contacts, selectedId]);
 
@@ -51,17 +56,6 @@ export default function MessagesClient({ currentUserId, contacts, initialSelecte
     const data = await res.json();
     setMessages(data.messages ?? []);
   };
-
-  useEffect(() => {
-    if (initialSelectedId && contacts.some((contact) => contact._id === initialSelectedId)) {
-      setSelectedId(initialSelectedId);
-      return;
-    }
-
-    if (!contacts.some((contact) => contact._id === selectedId)) {
-      setSelectedId(contacts[0]?._id ?? "");
-    }
-  }, [contacts, initialSelectedId, selectedId]);
 
   useEffect(() => {
     if (!selectedId) return;
@@ -185,7 +179,7 @@ export default function MessagesClient({ currentUserId, contacts, initialSelecte
                   : "border-slate-700 bg-slate-900/50 text-slate-300 hover:bg-slate-800"
               }`}
               type="button"
-              onClick={() => setSelectedId(contact._id)}
+              onClick={() => setManualSelectedId(contact._id)}
             >
               {contact.firstName} {contact.lastName}
             </button>

@@ -676,6 +676,14 @@ export default function FeedClient({ initialPosts, suggestedUsers, incomingReque
 
         {posts.map((post, i) => {
           const myReaction = post.reactions.find((r) => r.user?._id === currentUserId)?.type;
+          const reactionCounts = post.reactions.reduce<Record<string, number>>((acc, reaction) => {
+            acc[reaction.type] = (acc[reaction.type] ?? 0) + 1;
+            return acc;
+          }, {});
+          const topReactionTypes = Object.entries(reactionCounts)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 3)
+            .map(([type]) => type);
           const isOwner = post.author?._id === currentUserId;
           const authorFullName = `${post.author.firstName} ${post.author.lastName}`;
           const authorInitials = `${post.author.firstName?.[0] ?? ""}${post.author.lastName?.[0] ?? ""}`.toUpperCase();
@@ -792,6 +800,29 @@ export default function FeedClient({ initialPosts, suggestedUsers, incomingReque
                       {media.name ?? "PDF attachment"}
                     </a>
                   ))}
+                </div>
+              ) : null}
+
+              {post.reactions.length ? (
+                <div className="mt-3 flex items-center gap-2 text-xs text-slate-300">
+                  <div className="flex items-center">
+                    {topReactionTypes.map((type, index) => {
+                      const option = reactionOptions.find((item) => item.type === type);
+                      if (!option) return null;
+                      const Icon = option.icon;
+
+                      return (
+                        <span
+                          key={`${post._id}-summary-${type}`}
+                          className={`inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-700 bg-slate-900 ${option.color} ${index > 0 ? "-ml-1" : ""}`}
+                          title={option.label}
+                        >
+                          <Icon className="h-3 w-3" />
+                        </span>
+                      );
+                    })}
+                  </div>
+                  <span>{post.reactions.length} reactions</span>
                 </div>
               ) : null}
 
@@ -1054,6 +1085,37 @@ export default function FeedClient({ initialPosts, suggestedUsers, incomingReque
                       {media.name ?? "PDF attachment"}
                     </a>
                   ))}
+                </div>
+              ) : null}
+
+              {activeFocusPost.reactions.length ? (
+                <div className="mt-3 flex items-center gap-2 text-xs text-slate-300">
+                  <div className="flex items-center">
+                    {Object.entries(
+                      activeFocusPost.reactions.reduce<Record<string, number>>((acc, reaction) => {
+                        acc[reaction.type] = (acc[reaction.type] ?? 0) + 1;
+                        return acc;
+                      }, {})
+                    )
+                      .sort((a, b) => b[1] - a[1])
+                      .slice(0, 3)
+                      .map(([type], index) => {
+                        const option = reactionOptions.find((item) => item.type === type);
+                        if (!option) return null;
+                        const Icon = option.icon;
+
+                        return (
+                          <span
+                            key={`focus-${activeFocusPost._id}-summary-${type}`}
+                            className={`inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-700 bg-slate-900 ${option.color} ${index > 0 ? "-ml-1" : ""}`}
+                            title={option.label}
+                          >
+                            <Icon className="h-3 w-3" />
+                          </span>
+                        );
+                      })}
+                  </div>
+                  <span>{activeFocusPost.reactions.length} reactions</span>
                 </div>
               ) : null}
             </motion.article>
