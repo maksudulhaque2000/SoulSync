@@ -1,46 +1,287 @@
-## Production Setup
+# SoulSync
 
-Set these environment variables in Vercel before deploying:
+<div align="center">
+  <img src="./public/preview.png" height="400" width="800" alt="SoulSync Cover"/>
+</div>
 
-- `MONGODB_URI`
-- `NEXTAUTH_SECRET`
-- `NEXTAUTH_URL`
-- `BLOB_READ_WRITE_TOKEN`
+A full-stack social platform focused on expressive posting, meaningful connections, real-time conversations, and admin-level moderation.
 
-For local development, copy `.env.example` to `.env.local` and fill in the values.
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+## Live Demo
 
-## Getting Started
+- Production URL: https://soul-sync-navy.vercel.app/
 
-First, run the development server:
+## Overview
+
+SoulSync is built with Next.js App Router and provides:
+
+- JWT-based authentication with NextAuth credentials provider
+- Rich social feed with reactions, comments, sharing, and media uploads
+- Connection workflows (request, accept, reject, remove, block)
+- Direct messaging with unread counters and conversation summaries
+- Profile management and public profile pages
+- Admin dashboard with advanced moderation controls
+
+The project is designed for Vercel deployment and uses MongoDB for persistence.
+
+## Tech Stack
+
+### Frontend
+
+- Next.js 16 (App Router)
+- React 19
+- Tailwind CSS 4
+- Framer Motion
+- Lucide Icons
+- TipTap editor
+- React Hook Form + Zod
+- React Hot Toast
+
+### Backend
+
+- Next.js Route Handlers
+- NextAuth v4 (Credentials, JWT sessions)
+- Mongoose + MongoDB
+- Zod request validation
+
+### Uploads
+
+- Vercel Blob in production
+- Local fallback to public/uploads in non-Vercel environments
+
+## Core Features
+
+### Authentication
+
+- Email/password registration and login
+- Session strategy: JWT
+- Server-side auth guards in API routes and pages
+- Automatic admin bootstrap utility
+
+### Feed and Posts
+
+- Rich text composer
+- Image and PDF attachments
+- Text style customization
+- Reactions and comments
+- Share interactions
+- Post visibility control (including admin moderation)
+
+### Social Graph
+
+- Connection request flow
+- Accept/reject/remove connections
+- User block support
+- Suggested users
+
+### Messaging
+
+- Direct 1:1 conversations
+- Text + voice messages
+- Read/unread tracking
+- Conversation summary endpoint
+
+### Profiles
+
+- Private profile management
+- Public profile view by user id
+- Profile posts listing
+- Admin can moderate posts directly from public profile pages
+
+### Admin Control Center
+
+- Dashboard analytics
+- User role management
+- Block/unblock users
+- Time-based posting restrictions
+- View a selected user's posts
+- Hide/unhide/delete posts
+- User deletion with related cleanup safeguards
+
+## Project Structure
+
+```text
+src/
+  app/
+    admin/
+    api/
+      admin/
+      auth/
+      connection/
+      conversations/
+      messages/
+      notifications/
+      posts/
+      profile/
+      upload/
+    feed/
+    messages/
+    profile/
+  components/
+  lib/
+  models/
+  types/
+public/
+  uploads/
+```
+
+## Data Models
+
+### User
+
+Includes identity and profile fields, social graph fields, and moderation fields:
+
+- role: user | admin
+- isBlocked, blockReason, blockedAt
+- postRestrictionUntil, postRestrictionReason
+- connections, pendingSent, pendingReceived, blockedUsers
+
+### Post
+
+- author reference
+- content and textStyle
+- media attachments
+- reactions and comments
+- isHidden moderation flag
+
+### Message
+
+- from, to
+- text and optional voiceUrl
+- read status
+
+### Notification
+
+- per-user notifications for activity and system events
+
+## API Surface (High-Level)
+
+### Auth
+
+- POST /api/auth/register
+- NextAuth handler at /api/auth/[...nextauth]
+
+### Admin
+
+- GET /api/admin/overview
+- PATCH, DELETE /api/admin/users/[id]
+- GET /api/admin/users/[id]/posts
+- PATCH, DELETE /api/admin/posts/[id]
+
+### Social
+
+- POST /api/connection/request
+- POST /api/connection/accept
+- POST /api/connection/reject
+- POST /api/connection/remove
+- POST /api/connection/block
+
+### Feed and Content
+
+- GET, POST /api/posts
+- PATCH, DELETE /api/posts/[id]
+- POST /api/posts/[id]/react
+- POST /api/posts/[id]/comment
+
+### Profile
+
+- GET, PUT /api/profile
+- GET /api/profile/posts
+
+### Messaging and Notifications
+
+- GET, POST /api/messages
+- GET /api/conversations
+- GET, PATCH /api/notifications
+
+### Upload
+
+- POST /api/upload
+
+## Environment Variables
+
+Create a .env.local file with:
+
+```bash
+MONGODB_URI=your_mongodb_connection_string
+NEXTAUTH_SECRET=your_nextauth_secret
+NEXTAUTH_URL=http://localhost:3000
+BLOB_READ_WRITE_TOKEN=your_vercel_blob_token
+```
+
+Notes:
+
+- BLOB_READ_WRITE_TOKEN is required for uploads on Vercel.
+- NEXTAUTH_URL should match your deployed domain in production.
+
+## Local Development
+
+### 1) Install dependencies
+
+```bash
+npm install
+```
+
+### 2) Configure environment variables
+
+Add the required variables in .env.local.
+
+### 3) Start development server
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- npm run dev: start development server
+- npm run build: create production build
+- npm run start: run production server
+- npm run lint: run ESLint
 
-## Learn More
+## Build and Quality Checks
 
-To learn more about Next.js, take a look at the following resources:
+Recommended before every deployment:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npm run lint
+npm run build
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Deployment on Vercel
 
-## Deploy on Vercel
+1. Import this repository into Vercel
+2. Set all required environment variables in Project Settings
+3. Deploy from main branch
+4. Confirm production logs and route health
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+If uploads fail in production, verify BLOB_READ_WRITE_TOKEN first.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Security and Admin Notes
+
+The system includes an auto-created admin account utility in src/lib/admin.ts.
+
+Important:
+
+- Update default admin credentials immediately for production use
+- Keep NEXTAUTH_SECRET strong and private
+- Restrict database and Blob credentials to server-side only
+
+## Operational Notes
+
+- Mongo connection uses a global cached connection strategy for server runtime stability.
+- Uploads fall back to local disk only outside Vercel when Blob token is unavailable.
+- Admin moderation changes are reflected through protected server endpoints.
+
+## Known Good Deployment Baseline
+
+The project has been validated with:
+
+- Successful ESLint checks
+- Successful Next.js production build
+- Functional admin dashboard routes and moderation APIs
+
+## License
+
+No explicit license file is currently defined in this repository.
