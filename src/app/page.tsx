@@ -71,7 +71,10 @@ export default async function Home() {
         <div className="absolute -bottom-32 left-1/3 h-96 w-96 rounded-full bg-slate-500/10 blur-3xl" />
       </div>
 
-      <TopNav fullName={`${session.user.firstName} ${session.user.lastName}`} isAdmin={session.user.role === "admin"} />
+      <TopNav
+        fullName={`${session.user.firstName} ${session.user.lastName}`}
+        isAdmin={session.user.role === "admin"}
+      />
       <FeedClient
         initialPosts={posts}
         suggestedUsers={users}

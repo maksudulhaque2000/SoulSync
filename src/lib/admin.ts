@@ -11,7 +11,7 @@ export async function ensureSystemAdminUser() {
 
   if (!user) {
     const passwordHash = await bcrypt.hash(SYSTEM_ADMIN_PASSWORD, 10);
-    const created = await User.create({
+    await User.create({
       firstName: "System",
       lastName: "Admin",
       email,
@@ -23,7 +23,6 @@ export async function ensureSystemAdminUser() {
       postRestrictionUntil: null,
       postRestrictionReason: "",
     });
-    console.log("[ADMIN] System admin account created:", created._id);
     return;
   }
 
@@ -46,7 +45,6 @@ export async function ensureSystemAdminUser() {
 
   if (Object.keys(updates).length > 0) {
     await User.updateOne({ _id: user._id }, { $set: updates });
-    console.log("[ADMIN] System admin account updated:", user._id);
   }
 }
 

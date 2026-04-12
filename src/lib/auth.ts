@@ -3,8 +3,8 @@ import { AuthOptions, getServerSession } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { z } from "zod";
 
-import { connectDB } from "@/lib/db";
 import { ensureSystemAdminUser } from "@/lib/admin";
+import { connectDB } from "@/lib/db";
 import User from "@/models/User";
 
 const credentialsSchema = z.object({
@@ -73,21 +73,19 @@ export const authOptions: AuthOptions = {
         token.role = user.role ?? "user";
         token.isBlocked = user.isBlocked ?? false;
         token.postRestrictionUntil = user.postRestrictionUntil ?? null;
-        console.log("[JWT] Token set for", user.email, "role:", token.role);
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
-        session.user.id = (token.id as string) ?? "";
-        session.user.email = (token.email as string) ?? "";
-        session.user.firstName = (token.firstName as string) ?? "";
-        session.user.lastName = (token.lastName as string) ?? "";
-        session.user.avatar = (token.avatar as string) ?? "";
-        session.user.role = ((token.role as string) ?? "user") as "user" | "admin";
+        session.user.id = token.id;
+        session.user.email = token.email;
+        session.user.firstName = token.firstName;
+        session.user.lastName = token.lastName;
+        session.user.avatar = token.avatar;
+        session.user.role = token.role ?? "user";
         session.user.isBlocked = Boolean(token.isBlocked ?? false);
-        session.user.postRestrictionUntil = (token.postRestrictionUntil as string | null) ?? null;
-        console.log("[SESSION] Session callback -", session.user.email, "role:", session.user.role, "isAdmin:", session.user.role === "admin");
+        session.user.postRestrictionUntil = token.postRestrictionUntil ?? null;
       }
       return session;
     },

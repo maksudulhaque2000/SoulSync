@@ -1,7 +1,7 @@
 "use client";
 
-import { format } from "date-fns";
-import { Copy, FileText, HandHeart, Heart, Lightbulb, MessageCircle, PartyPopper, Send, Share2, ThumbsUp } from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
+import { Copy, Eye, EyeOff, FileText, HandHeart, Heart, Lightbulb, MessageCircle, MoreHorizontal, PartyPopper, Send, Share2, ThumbsUp, Trash2 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -31,6 +31,7 @@ type PublicPost = {
   _id: string;
   content: string;
   createdAt: string;
+  isHidden?: boolean;
   textStyle?: {
     backgroundColor?: string;
     textAlign?: "left" | "center" | "right";
@@ -48,6 +49,7 @@ type PublicPost = {
 type Props = {
   initialPosts: PublicPost[];
   currentUserId: string;
+  canModerate?: boolean;
 };
 
 const reactionOptions = [
@@ -78,17 +80,15 @@ function htmlToText(html: string) {
   return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 }
 
-function formatPostDate(dateString: string) {
-  return format(new Date(dateString), "dd MMM yyyy");
-}
-
-export default function PublicProfilePostsClient({ initialPosts, currentUserId }: Props) {
+export default function PublicProfilePostsClient({ initialPosts, currentUserId, canModerate = false }: Props) {
   const router = useRouter();
   const [posts, setPosts] = useState(initialPosts);
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
   const [openReactionPostId, setOpenReactionPostId] = useState<string | null>(null);
   const [openCommentPostId, setOpenCommentPostId] = useState<string | null>(null);
   const [openSharePostId, setOpenSharePostId] = useState<string | null>(null);
+  const [openManagePostId, setOpenManagePostId] = useState<string | null>(null);
+  const [workingPostId, setWorkingPostId] = useState<string | null>(null);
 
   useEffect(() => {
     setPosts(initialPosts);
@@ -203,6 +203,54 @@ export default function PublicProfilePostsClient({ initialPosts, currentUserId }
     await sharePost(postId);
   };
 
+  const togglePostVisibility = async (postId: string, currentHidden: boolean) => {
+    setWorkingPostId(postId);
+    try {
+      const res = await fetch(`/api/admin/posts/${postId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isHidden: !currentHidden }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to update post");
+      }
+
+      setPosts((prev) => prev.map((post) => (post._id === postId ? { ...post, isHidden: !currentHidden } : post)));
+      setOpenManagePostId(null);
+      toast.success(!currentHidden ? "Post hidden" : "Post unhidden");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to update post";
+      toast.error(message);
+    } finally {
+      setWorkingPostId(null);
+    }
+  };
+
+  const deletePost = async (postId: string) => {
+    if (!window.confirm("এই পোস্ট delete করতে চান?")) return;
+
+    setWorkingPostId(postId);
+    try {
+      const res = await fetch(`/api/admin/posts/${postId}`, { method: "DELETE" });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to delete post");
+      }
+
+      setPosts((prev) => prev.filter((post) => post._id !== postId));
+      setOpenManagePostId(null);
+      toast.success("Post deleted");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to delete post";
+      toast.error(message);
+    } finally {
+      setWorkingPostId(null);
+    }
+  };
+
   if (!posts.length) {
     return <div className="card-panel text-sm text-slate-400">No public posts from this user yet.</div>;
   }
@@ -226,7 +274,45 @@ export default function PublicProfilePostsClient({ initialPosts, currentUserId }
           <article key={post._id} className="card-panel">
             <div className="mb-3 flex items-center justify-between text-sm text-slate-300">
               <p>{post.author.firstName} {post.author.lastName}</p>
-              <p>{formatPostDate(post.createdAt)}</p>
+              <div className="flex items-center gap-2">
+                <p>{formatDistanceToNow(new Date(post.createdAt), { addSuffix: true })}</p>
+                {canModerate ? (
+                  <div className="relative" data-admin-menu-root="true">
+                    <button
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-700/80 bg-slate-900/70 text-slate-300 transition hover:border-slate-500 hover:bg-slate-800"
+                      type="button"
+                      disabled={workingPostId === post._id}
+                      onClick={() => setOpenManagePostId((prev) => (prev === post._id ? null : post._id))}
+                    >
+                      <MoreHorizontal className="h-4 w-4" />
+                    </button>
+
+                    {openManagePostId === post._id ? (
+                      <div className="absolute right-0 z-30 mt-2 w-44 rounded-xl border border-slate-700/80 bg-slate-950/95 p-2 shadow-2xl backdrop-blur-xl">
+                        <button
+                          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"
+                          type="button"
+                          disabled={workingPostId === post._id}
+                          onClick={() => void togglePostVisibility(post._id, Boolean(post.isHidden))}
+                        >
+                          {post.isHidden ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                          {post.isHidden ? "Unhide Post" : "Hide Post"}
+                        </button>
+                        <div className="my-1 h-px bg-slate-800" />
+                        <button
+                          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-rose-200 transition hover:bg-rose-900/20 disabled:opacity-50"
+                          type="button"
+                          disabled={workingPostId === post._id}
+                          onClick={() => void deletePost(post._id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Delete Post
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
             </div>
 
             <div

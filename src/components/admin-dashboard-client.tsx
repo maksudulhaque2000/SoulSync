@@ -1,9 +1,9 @@
 "use client";
 
-import { MoreVertical, Shield, Trash2, UserCog, Lock, Unlock, FileText } from "lucide-react";
-import { useState } from "react";
+import { Ban, Clock3, Eye, EyeOff, MoreHorizontal, RefreshCw, Shield, ShieldOff, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
-import { AnimatePresence, motion } from "framer-motion";
 
 type AdminStats = {
   totalUsers: number;
@@ -11,6 +11,7 @@ type AdminStats = {
   blockedUsers: number;
   restrictedUsers: number;
   adminUsers: number;
+  messageCount: number;
 };
 
 type AdminUser = {
@@ -18,23 +19,32 @@ type AdminUser = {
   firstName: string;
   lastName: string;
   email: string;
-  role: "user" | "admin";
-  isBlocked: boolean;
+  avatar?: string;
+  role?: "user" | "admin";
+  isBlocked?: boolean;
   blockedAt?: string | null;
+  blockReason?: string;
   postRestrictionUntil?: string | null;
+  postRestrictionReason?: string;
   createdAt: string;
 };
 
 type AdminPost = {
   _id: string;
-  content: string;
+  content?: string;
+  isHidden?: boolean;
   createdAt: string;
-  author: {
-    _id: string;
-    firstName: string;
-    lastName: string;
-    email: string;
-  } | null;
+  commentCount?: number;
+  reactionCount?: number;
+  author?: {
+    _id?: string;
+    firstName?: string;
+    lastName?: string;
+    email?: string;
+    avatar?: string;
+  };
+  comments?: Array<unknown>;
+  reactions?: Array<unknown>;
 };
 
 type UserPost = {
@@ -42,440 +52,635 @@ type UserPost = {
   content: string;
   createdAt: string;
   isHidden: boolean;
-  media: { url: string; type: "image" | "pdf"; name?: string }[];
   reactionCount: number;
   commentCount: number;
 };
 
-type AdminOverviewResponse = {
+type OverviewPayload = {
   stats: AdminStats;
   users: AdminUser[];
   posts: AdminPost[];
 };
 
-type Props = {
-  initialData: AdminOverviewResponse;
-  currentAdminId: string;
-};
+function htmlToText(html: string | undefined) {
+  if (!html) return "";
+  return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+}
 
-const restrictionDurations = [
-  { label: "24 hours", value: "24h" },
-  { label: "3 days", value: "3d" },
-  { label: "7 days", value: "7d" },
-  { label: "1 month", value: "30d" },
-] as const;
-
-function formatDate(value: string | null | undefined) {
+function formatDateTime(value?: string | null) {
   if (!value) return "-";
   return new Date(value).toLocaleString();
 }
 
-function previewText(html: string) {
-  const text = html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
-  if (!text) return "(No content)";
-  return text.length > 120 ? `${text.slice(0, 120)}...` : text;
-}
+const menuActionClass =
+  "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-slate-200 transition hover:bg-slate-800 disabled:opacity-50";
 
-export default function AdminDashboardClient({ initialData, currentAdminId }: Props) {
-  const [data, setData] = useState(initialData);
-  const [loadingKey, setLoadingKey] = useState<string | null>(null);
-  const [selectedUserInfo, setSelectedUserInfo] = useState<AdminUser | null>(null);
-  const [userPosts, setUserPosts] = useState<UserPost[]>([]);
+export default function AdminDashboardClient({ currentUserId }: { currentUserId: string }) {
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [workingUserId, setWorkingUserId] = useState<string | null>(null);
+  const [workingPostId, setWorkingPostId] = useState<string | null>(null);
+  const [openUserMenuId, setOpenUserMenuId] = useState<string | null>(null);
+  const [openPostMenuId, setOpenPostMenuId] = useState<string | null>(null);
+  const [selectedUserPostsId, setSelectedUserPostsId] = useState<string | null>(null);
+  const [selectedUserPostsName, setSelectedUserPostsName] = useState("");
+  const [selectedUserPostsEmail, setSelectedUserPostsEmail] = useState("");
   const [userPostsLoading, setUserPostsLoading] = useState(false);
-  const [selectedUserPosts, setSelectedUserPosts] = useState<AdminUser | null>(null);
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [userPosts, setUserPosts] = useState<UserPost[]>([]);
+  const [query, setQuery] = useState("");
+  const [stats, setStats] = useState<AdminStats>({
+    totalUsers: 0,
+    totalPosts: 0,
+    blockedUsers: 0,
+    restrictedUsers: 0,
+    adminUsers: 0,
+    messageCount: 0,
+  });
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [posts, setPosts] = useState<AdminPost[]>([]);
 
-  const refreshOverview = async () => {
+  const loadOverview = async (showRefreshState = false) => {
+    if (showRefreshState) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
+
     try {
       const res = await fetch("/api/admin/overview", { cache: "no-store" });
-      if (!res.ok) return;
-      const payload = (await res.json()) as AdminOverviewResponse;
-      setData(payload);
-    } catch (err) {
-      console.error("Dashboard refresh error:", err);
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to load dashboard data");
+      }
+
+      const payload = data as OverviewPayload;
+      setStats(payload.stats);
+      setUsers(payload.users ?? []);
+      setPosts(payload.posts ?? []);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to load dashboard data";
+      toast.error(message);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
   };
 
-  const loadUserPosts = async (userId: string) => {
+  useEffect(() => {
+    void loadOverview();
+  }, []);
+
+  useEffect(() => {
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setOpenUserMenuId(null);
+      setOpenPostMenuId(null);
+    };
+
+    const onPointerDown = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target?.closest("[data-admin-menu-root='true']")) {
+        setOpenUserMenuId(null);
+        setOpenPostMenuId(null);
+      }
+    };
+
+    document.addEventListener("keydown", onEscape);
+    document.addEventListener("mousedown", onPointerDown);
+    return () => {
+      document.removeEventListener("keydown", onEscape);
+      document.removeEventListener("mousedown", onPointerDown);
+    };
+  }, []);
+
+  const filteredUsers = useMemo(() => {
+    const keyword = query.trim().toLowerCase();
+    if (!keyword) return users;
+
+    return users.filter((user) => {
+      const name = `${user.firstName ?? ""} ${user.lastName ?? ""}`.toLowerCase();
+      const email = (user.email ?? "").toLowerCase();
+      return name.includes(keyword) || email.includes(keyword);
+    });
+  }, [query, users]);
+
+  const filteredPosts = useMemo(() => {
+    const sourcePosts: AdminPost[] = selectedUserPostsId
+      ? userPosts.map((post) => ({
+          _id: post._id,
+          content: post.content,
+          isHidden: post.isHidden,
+          createdAt: post.createdAt,
+          commentCount: post.commentCount,
+          reactionCount: post.reactionCount,
+          author: {
+            _id: selectedUserPostsId,
+            firstName: selectedUserPostsName.split(" ")[0] ?? "",
+            lastName: selectedUserPostsName.split(" ").slice(1).join(" "),
+            email: selectedUserPostsEmail,
+          },
+        }))
+      : posts;
+
+    const keyword = query.trim().toLowerCase();
+    if (!keyword) return sourcePosts;
+
+    return sourcePosts.filter((post) => {
+      const author = `${post.author?.firstName ?? ""} ${post.author?.lastName ?? ""}`.toLowerCase();
+      const text = htmlToText(post.content).toLowerCase();
+      return author.includes(keyword) || text.includes(keyword);
+    });
+  }, [posts, query, selectedUserPostsEmail, selectedUserPostsId, selectedUserPostsName, userPosts]);
+
+  const reloadPostsForSelectedUser = async (userId: string) => {
     setUserPostsLoading(true);
     try {
-      const res = await fetch(`/api/admin/users/${userId}/posts`);
+      const res = await fetch(`/api/admin/users/${userId}/posts`, { cache: "no-store" });
+      const data = await res.json();
       if (!res.ok) {
-        toast.error("Failed to load posts");
-        return;
+        throw new Error(data.error || "Failed to load user posts");
       }
-      const payload = await res.json();
-      setUserPosts(payload.posts ?? []);
-      setSelectedUserPosts(data.users.find((u) => u._id === userId) ?? null);
-    } catch {
-      toast.error("Error loading posts");
+      setUserPosts(data.posts ?? []);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to load user posts";
+      toast.error(message);
     } finally {
       setUserPostsLoading(false);
     }
   };
 
-  const updateUser = async (userId: string, body: Record<string, unknown>, successMessage: string) => {
-    setLoadingKey(`user-${userId}`);
+  const openUserPosts = async (user: AdminUser) => {
+    setSelectedUserPostsId(user._id);
+    setSelectedUserPostsName(`${user.firstName} ${user.lastName}`.trim());
+    setSelectedUserPostsEmail(user.email ?? "");
+    await reloadPostsForSelectedUser(user._id);
+  };
+
+  const clearSelectedUserPosts = () => {
+    setSelectedUserPostsId(null);
+    setSelectedUserPostsName("");
+    setSelectedUserPostsEmail("");
+    setUserPosts([]);
+    setOpenPostMenuId(null);
+  };
+
+  const updateUserAction = async (
+    userId: string,
+    payload: Record<string, unknown>,
+    successMessage: string
+  ) => {
+    setWorkingUserId(userId);
     try {
       const res = await fetch(`/api/admin/users/${userId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify(payload),
       });
+      const data = await res.json();
 
       if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        toast.error(errorData.error ?? "Action failed");
-        return;
+        throw new Error(data.error || "Failed to update role");
       }
 
+      if (data.user) {
+        setUsers((prev) => prev.map((item) => (item._id === userId ? { ...item, ...data.user } : item)));
+      }
+
+      await loadOverview(true);
+
       toast.success(successMessage);
-      setOpenMenuId(null);
-      await refreshOverview();
-    } catch {
-      toast.error("Action failed");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to update user";
+      toast.error(message);
     } finally {
-      setLoadingKey(null);
+      setWorkingUserId(null);
     }
   };
 
-  const removePost = async (postId: string) => {
-    setLoadingKey(`post-${postId}`);
+  const updateRole = async (userId: string, role: "user" | "admin") => {
+    await updateUserAction(userId, { action: "setRole", role }, "User role updated");
+  };
+
+  const toggleUserBlock = async (user: AdminUser) => {
+    if (user.isBlocked) {
+      await updateUserAction(user._id, { action: "unblock" }, "User unblocked");
+      return;
+    }
+
+    const reason = window.prompt("Block reason লিখুন (optional):", "Blocked by admin") ?? "Blocked by admin";
+    await updateUserAction(user._id, { action: "block", reason }, "User blocked");
+  };
+
+  const applyRestriction = async (user: AdminUser) => {
+    const duration = window.prompt("Restriction duration দিন (24h / 3d / 7d / 30d)", "24h");
+    if (!duration) return;
+
+    if (!["24h", "3d", "7d", "30d"].includes(duration)) {
+      toast.error("Invalid duration");
+      return;
+    }
+
+    const reason = window.prompt("Restriction reason লিখুন (optional):", "Posting restricted by admin") ?? "Posting restricted by admin";
+    await updateUserAction(
+      user._id,
+      { action: "restrict", duration, reason },
+      "Posting restriction applied"
+    );
+  };
+
+  const clearRestriction = async (userId: string) => {
+    await updateUserAction(userId, { action: "clearRestriction" }, "Posting restriction cleared");
+  };
+
+  const deleteUser = async (userId: string) => {
+    const confirmed = window.confirm("এই ইউজার এবং তার ডেটা delete করতে চান?");
+    if (!confirmed) return;
+
+    setWorkingUserId(userId);
+    try {
+      const res = await fetch(`/api/admin/users/${userId}`, { method: "DELETE" });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to delete user");
+      }
+
+      setUsers((prev) => prev.filter((item) => item._id !== userId));
+      setStats((prev) => ({
+        ...prev,
+        totalUsers: Math.max(0, prev.totalUsers - 1),
+        adminUsers: Math.max(0, prev.adminUsers - (data.deletedRole === "admin" ? 1 : 0)),
+      }));
+      setPosts((prev) => prev.filter((item) => item.author?._id !== userId));
+      setOpenUserMenuId(null);
+      if (selectedUserPostsId === userId) {
+        clearSelectedUserPosts();
+      }
+      await loadOverview(true);
+      toast.success("User deleted");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to delete user";
+      toast.error(message);
+    } finally {
+      setWorkingUserId(null);
+    }
+  };
+
+  const togglePostVisibility = async (postId: string, currentHidden: boolean) => {
+    setWorkingPostId(postId);
+    try {
+      const res = await fetch(`/api/admin/posts/${postId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isHidden: !currentHidden }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to update post visibility");
+      }
+
+      setPosts((prev) => prev.map((item) => (item._id === postId ? { ...item, isHidden: !currentHidden } : item)));
+      setUserPosts((prev) => prev.map((item) => (item._id === postId ? { ...item, isHidden: !currentHidden } : item)));
+      toast.success(!currentHidden ? "Post hidden" : "Post unhidden");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to update post visibility";
+      toast.error(message);
+    } finally {
+      setWorkingPostId(null);
+    }
+  };
+
+  const deletePost = async (postId: string) => {
+    const confirmed = window.confirm("এই পোস্ট delete করতে চান?");
+    if (!confirmed) return;
+
+    setWorkingPostId(postId);
     try {
       const res = await fetch(`/api/admin/posts/${postId}`, { method: "DELETE" });
+      const data = await res.json();
+
       if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        toast.error(errorData.error ?? "Delete failed");
-        return;
+        throw new Error(data.error || "Failed to delete post");
       }
+
+      setPosts((prev) => prev.filter((item) => item._id !== postId));
+      setUserPosts((prev) => prev.filter((item) => item._id !== postId));
+      setStats((prev) => ({ ...prev, totalPosts: Math.max(0, prev.totalPosts - 1) }));
+      setOpenPostMenuId(null);
+      await loadOverview(true);
       toast.success("Post deleted");
-      await loadUserPosts(selectedUserPosts?._id ?? "");
-    } catch {
-      toast.error("Delete failed");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to delete post";
+      toast.error(message);
     } finally {
-      setLoadingKey(null);
+      setWorkingPostId(null);
     }
   };
 
   return (
-    <div className="mx-auto w-full max-w-7xl px-4 py-6">
-      <section className="card-panel mb-6 overflow-hidden">
-        <div className="relative">
-          <div className="pointer-events-none absolute -right-10 -top-12 h-44 w-44 rounded-full bg-cyan-500/20 blur-3xl" />
-          <p className="inline-flex items-center gap-2 rounded-full border border-cyan-500/40 bg-cyan-500/15 px-3 py-1 text-xs uppercase tracking-[0.2em] text-cyan-200">
-            <Shield className="h-3.5 w-3.5" />
-            Platform Control Center
-          </p>
-          <h1 className="mt-3 font-display text-3xl text-slate-100 md:text-4xl">Admin Dashboard</h1>
-          <p className="mt-2 max-w-3xl text-sm text-slate-300">
-            Comprehensive moderation and user management system for platform administrators.
-          </p>
-        </div>
-      </section>
-
-      <section className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <article className="card-panel">
-          <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Total Users</p>
-          <p className="mt-2 text-2xl font-semibold text-slate-100">{data.stats.totalUsers}</p>
-        </article>
-        <article className="card-panel">
-          <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Total Posts</p>
-          <p className="mt-2 text-2xl font-semibold text-slate-100">{data.stats.totalPosts}</p>
-        </article>
-        <article className="card-panel">
-          <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Blocked</p>
-          <p className="mt-2 text-2xl font-semibold text-rose-300">{data.stats.blockedUsers}</p>
-        </article>
-        <article className="card-panel">
-          <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Restricted</p>
-          <p className="mt-2 text-2xl font-semibold text-amber-300">{data.stats.restrictedUsers}</p>
-        </article>
-        <article className="card-panel">
-          <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Admins</p>
-          <p className="mt-2 text-2xl font-semibold text-cyan-300">{data.stats.adminUsers}</p>
-        </article>
-      </section>
-
-      <section className="grid gap-6 lg:grid-cols-[1fr_1.3fr]">
-        <article className="card-panel">
-          <div className="mb-4 flex items-center gap-2">
-            <UserCog className="h-5 w-5 text-cyan-300" />
-            <h2 className="font-display text-xl text-slate-100">User Management</h2>
+    <section className="mx-auto w-full max-w-6xl px-4 py-6">
+      <div className="card-panel">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-[0.18em] text-cyan-300">Admin Console</p>
+            <h1 className="mt-2 font-display text-3xl text-slate-100">Dashboard Control</h1>
+            <p className="mt-2 text-sm text-slate-400">Users, posts এবং system activity এখান থেকে manage করুন।</p>
           </div>
 
-          <div className="hide-scrollbar max-h-[70vh] space-y-2 overflow-y-auto">
-            {data.users.map((user) => {
-              const isSelf = user._id === currentAdminId;
-              const userBusy = loadingKey?.startsWith(`user-${user._id}`);
+          <button
+            className="icon-btn"
+            type="button"
+            onClick={() => void loadOverview(true)}
+            disabled={refreshing || loading}
+          >
+            <RefreshCw className={`h-4 w-4 ${(refreshing || loading) ? "animate-spin" : ""}`} />
+            Refresh
+          </button>
+        </div>
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-3">
+          <div className="rounded-xl border border-slate-700/70 bg-slate-900/40 p-4">
+            <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Users</p>
+            <p className="mt-2 text-2xl font-semibold text-slate-100">{stats.totalUsers}</p>
+          </div>
+          <div className="rounded-xl border border-slate-700/70 bg-slate-900/40 p-4">
+            <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Posts</p>
+            <p className="mt-2 text-2xl font-semibold text-slate-100">{stats.totalPosts}</p>
+          </div>
+          <div className="rounded-xl border border-slate-700/70 bg-slate-900/40 p-4">
+            <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Messages</p>
+            <p className="mt-2 text-2xl font-semibold text-slate-100">{stats.messageCount}</p>
+          </div>
+          <div className="rounded-xl border border-slate-700/70 bg-slate-900/40 p-4">
+            <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Blocked Users</p>
+            <p className="mt-2 text-2xl font-semibold text-rose-300">{stats.blockedUsers}</p>
+          </div>
+          <div className="rounded-xl border border-slate-700/70 bg-slate-900/40 p-4">
+            <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Restricted</p>
+            <p className="mt-2 text-2xl font-semibold text-amber-300">{stats.restrictedUsers}</p>
+          </div>
+          <div className="rounded-xl border border-slate-700/70 bg-slate-900/40 p-4">
+            <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Admins</p>
+            <p className="mt-2 text-2xl font-semibold text-cyan-300">{stats.adminUsers}</p>
+          </div>
+        </div>
+
+        <div className="mt-5">
+          <input
+            className="auth-input h-11"
+            placeholder="Search users/posts by name, email or post text"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-4 xl:grid-cols-2">
+        <section className="card-panel">
+          <h2 className="font-display text-2xl text-slate-100">Manage Users</h2>
+          <p className="mt-1 text-sm text-slate-400">Role change, account cleanup এবং access control।</p>
+
+          <div className="mt-4 space-y-3">
+            {loading ? <p className="text-sm text-slate-400">Loading users...</p> : null}
+            {!loading && !filteredUsers.length ? <p className="text-sm text-slate-400">No users found.</p> : null}
+
+            {filteredUsers.map((user) => {
+              const isSelf = user._id === currentUserId;
+              const isBusy = workingUserId === user._id;
 
               return (
-                <div key={user._id} className="group relative rounded-xl border border-slate-700/50 bg-slate-900/50 p-3 transition hover:border-slate-600 hover:bg-slate-900/70">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-slate-100 truncate">
-                        {user.firstName} {user.lastName}
-                      </p>
-                      <p className="text-xs text-slate-400 truncate">{user.email}</p>
-                      <div className="mt-2 flex items-center gap-2 flex-wrap">
-                        <span className={`rounded px-2 py-0.5 text-[11px] font-semibold ${user.role === "admin" ? "border-cyan-500/50 bg-cyan-500/10 text-cyan-200" : "border-slate-600 bg-slate-800 text-slate-200"}`} style={{ borderWidth: "1px" }}>
-                          {user.role}
-                        </span>
-                        <span className={`rounded px-2 py-0.5 text-[11px] font-semibold ${user.isBlocked ? "border-rose-500/50 bg-rose-500/10 text-rose-200" : "border-emerald-500/50 bg-emerald-500/10 text-emerald-200"}`} style={{ borderWidth: "1px" }}>
-                          {user.isBlocked ? "Blocked" : "Active"}
-                        </span>
-                      </div>
+                <div
+                  key={user._id}
+                  className="rounded-xl border border-slate-700/70 bg-slate-900/35 p-3"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <p className="font-medium text-slate-100">{user.firstName} {user.lastName}</p>
+                      <p className="text-xs text-slate-400">{user.email}</p>
+                      <button
+                        className="mt-1 rounded-md border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 text-xs text-cyan-200 transition hover:bg-cyan-500/20"
+                        type="button"
+                        onClick={() => void openUserPosts(user)}
+                      >
+                        ID: {user._id}
+                      </button>
+                      <p className="mt-1 text-xs text-slate-500">Joined {new Date(user.createdAt).toLocaleDateString()}</p>
+                      <p className="mt-1 text-xs text-slate-500">Blocked at: {formatDateTime(user.blockedAt)}</p>
+                      <p className="text-xs text-slate-500">Restriction until: {formatDateTime(user.postRestrictionUntil)}</p>
+                      <Link
+                        href={`/profile/${user._id}`}
+                        className="mt-2 inline-flex items-center rounded-md border border-slate-600 px-2 py-1 text-xs text-slate-200 transition hover:bg-slate-800"
+                      >
+                        Visit Profile
+                      </Link>
                     </div>
 
-                    <div className="relative">
+                    <div className="flex flex-col items-end gap-1">
+                      <span className={`rounded-full border px-2 py-1 text-xs ${user.role === "admin" ? "border-cyan-500/50 bg-cyan-500/10 text-cyan-200" : "border-slate-600 bg-slate-800 text-slate-300"}`}>
+                        {user.role === "admin" ? "Admin" : "User"}
+                      </span>
+                      <span className={`rounded-full border px-2 py-1 text-xs ${user.isBlocked ? "border-rose-500/50 bg-rose-500/10 text-rose-200" : "border-emerald-500/50 bg-emerald-500/10 text-emerald-200"}`}>
+                        {user.isBlocked ? "Blocked" : "Active"}
+                      </span>
+
+                      <div className="relative" data-admin-menu-root="true">
+                        <button
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-700/80 bg-slate-900/70 text-slate-300 transition hover:border-slate-500 hover:bg-slate-800"
+                          type="button"
+                          disabled={isBusy}
+                          onClick={() => {
+                            setOpenUserMenuId((prev) => (prev === user._id ? null : user._id));
+                            setOpenPostMenuId(null);
+                          }}
+                        >
+                          <MoreHorizontal className="h-4 w-4" />
+                        </button>
+
+                        {openUserMenuId === user._id ? (
+                          <div className="absolute right-0 z-30 mt-2 w-56 rounded-xl border border-slate-700/80 bg-slate-950/95 p-2 shadow-2xl backdrop-blur-xl">
+                            <p className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Account</p>
+                            <button
+                              className={menuActionClass}
+                              type="button"
+                              disabled={isBusy || user.role === "admin"}
+                              onClick={() => void updateRole(user._id, "admin")}
+                            >
+                              <Shield className="h-4 w-4" />
+                              Make Admin
+                            </button>
+
+                            <button
+                              className={menuActionClass}
+                              type="button"
+                              disabled={isBusy || user.role !== "admin" || isSelf}
+                              onClick={() => void updateRole(user._id, "user")}
+                            >
+                              <ShieldOff className="h-4 w-4" />
+                              Remove Admin
+                            </button>
+
+                            <div className="my-1 h-px bg-slate-800" />
+                            <p className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Moderation</p>
+
+                            <button
+                              className={menuActionClass}
+                              type="button"
+                              disabled={isBusy || isSelf}
+                              onClick={() => void toggleUserBlock(user)}
+                            >
+                              <Ban className="h-4 w-4" />
+                              {user.isBlocked ? "Unblock User" : "Block User"}
+                            </button>
+
+                            <button
+                              className={menuActionClass}
+                              type="button"
+                              disabled={isBusy || isSelf || user.isBlocked}
+                              onClick={() => void applyRestriction(user)}
+                            >
+                              <Clock3 className="h-4 w-4" />
+                              Restrict Posting
+                            </button>
+
+                            <button
+                              className={menuActionClass}
+                              type="button"
+                              disabled={isBusy || isSelf || !user.postRestrictionUntil}
+                              onClick={() => void clearRestriction(user._id)}
+                            >
+                              Clear Restriction
+                            </button>
+
+                            <button
+                              className={menuActionClass}
+                              type="button"
+                              disabled={isBusy}
+                              onClick={() => void openUserPosts(user)}
+                            >
+                              <Eye className="h-4 w-4" />
+                              View User Posts
+                            </button>
+
+                            <div className="my-1 h-px bg-slate-800" />
+                            <p className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-rose-300/70">Danger Zone</p>
+
+                            <button
+                              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-rose-200 transition hover:bg-rose-900/20 disabled:opacity-50"
+                              type="button"
+                              disabled={isBusy || isSelf}
+                              onClick={() => void deleteUser(user._id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              Delete User
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="card-panel">
+          <h2 className="font-display text-2xl text-slate-100">Moderate Posts</h2>
+          <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm text-slate-400">
+              {selectedUserPostsId
+                ? `${selectedUserPostsName} এর posts দেখানো হচ্ছে. Hide/Unhide বা delete করতে পারবেন.`
+                : "Hide/Unhide বা permanent delete করে feed control করুন।"}
+            </p>
+            {selectedUserPostsId ? (
+              <button className="icon-btn" type="button" onClick={clearSelectedUserPosts}>
+                Show All Posts
+              </button>
+            ) : null}
+          </div>
+
+          <div className="mt-4 space-y-3">
+            {loading || (selectedUserPostsId && userPostsLoading) ? (
+              <p className="text-sm text-slate-400">Loading posts...</p>
+            ) : null}
+            {!loading && !filteredPosts.length ? <p className="text-sm text-slate-400">No posts found.</p> : null}
+
+            {filteredPosts.map((post) => {
+              const isBusy = workingPostId === post._id;
+              const postText = htmlToText(post.content);
+
+              return (
+                <div
+                  key={post._id}
+                  className="rounded-xl border border-slate-700/70 bg-slate-900/35 p-3"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm text-slate-100">
+                        {post.author?.firstName} {post.author?.lastName}
+                      </p>
+                      <p className="text-xs text-slate-400">{post.author?.email || "Unknown email"}</p>
+                      <p className="mt-2 line-clamp-2 text-sm text-slate-300">
+                        {postText || "(No text content)"}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {new Date(post.createdAt).toLocaleString()} • {post.commentCount ?? post.comments?.length ?? 0} comments • {post.reactionCount ?? post.reactions?.length ?? 0} reactions
+                      </p>
+                    </div>
+
+                    <span className={`rounded-full border px-2 py-1 text-xs ${post.isHidden ? "border-amber-500/50 bg-amber-500/10 text-amber-200" : "border-emerald-500/50 bg-emerald-500/10 text-emerald-200"}`}>
+                      {post.isHidden ? "Hidden" : "Visible"}
+                    </span>
+                  </div>
+
+                    <div className="relative mt-3 flex justify-end" data-admin-menu-root="true">
                       <button
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-700/80 bg-slate-900/70 text-slate-300 transition hover:border-slate-500 hover:bg-slate-800"
                         type="button"
-                        className="rounded-lg border border-slate-700 bg-slate-900/80 p-2 text-slate-400 transition hover:bg-slate-800"
-                        onClick={() => setOpenMenuId(openMenuId === user._id ? null : user._id)}
-                        disabled={userBusy}
+                        disabled={isBusy}
+                        onClick={() => {
+                          setOpenPostMenuId((prev) => (prev === post._id ? null : post._id));
+                          setOpenUserMenuId(null);
+                        }}
                       >
-                        <MoreVertical className="h-4 w-4" />
+                        <MoreHorizontal className="h-4 w-4" />
                       </button>
 
-                      <AnimatePresence>
-                        {openMenuId === user._id && (
-                          <motion.div
-                            initial={{ opacity: 0, y: -10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -10 }}
-                            className="absolute right-0 top-10 z-40 w-48 rounded-lg border border-slate-700 bg-slate-950 shadow-lg"
+                      {openPostMenuId === post._id ? (
+                        <div className="absolute right-0 z-30 mt-10 w-44 rounded-xl border border-slate-700/80 bg-slate-950/95 p-2 shadow-2xl backdrop-blur-xl">
+                          <button
+                            className={menuActionClass}
+                            type="button"
+                            disabled={isBusy}
+                            onClick={() => void togglePostVisibility(post._id, Boolean(post.isHidden))}
                           >
-                            <button
-                              type="button"
-                              className="w-full px-4 py-2 text-left text-sm text-slate-300 transition hover:bg-slate-800"
-                              onClick={() => {
-                                setSelectedUserInfo(user);
-                                setOpenMenuId(null);
-                              }}
-                            >
-                              Info
-                            </button>
-                            <button
-                              type="button"
-                              className="w-full px-4 py-2 text-left text-sm text-slate-300 transition hover:bg-slate-800 disabled:opacity-50"
-                              onClick={() => {
-                                loadUserPosts(user._id);
-                                setOpenMenuId(null);
-                              }}
-                              disabled={userPostsLoading}
-                            >
-                              View Posts
-                            </button>
-                            <hr className="border-slate-700" />
-                            <button
-                              type="button"
-                              className="w-full px-4 py-2 text-left text-sm text-slate-300 transition hover:bg-slate-800 disabled:opacity-50"
-                              onClick={() => void updateUser(user._id, { action: user.role === "admin" ? "setRole" : "setRole", role: user.role === "admin" ? "user" : "admin" }, user.role === "admin" ? "Demoted to user" : "Promoted to admin")}
-                              disabled={isSelf || userBusy}
-                            >
-                              {user.role === "admin" ? "Demote to User" : "Promote to Admin"}
-                            </button>
-                            <button
-                              type="button"
-                              className="w-full px-4 py-2 text-left text-sm text-slate-300 transition hover:bg-slate-800 disabled:opacity-50"
-                              onClick={() => void updateUser(user._id, { action: user.isBlocked ? "unblock" : "block" }, user.isBlocked ? "Unblocked" : "Blocked")}
-                              disabled={isSelf || userBusy}
-                            >
-                              {user.isBlocked ? <Unlock className="inline h-3.5 w-3.5 mr-1" /> : <Lock className="inline h-3.5 w-3.5 mr-1" />}
-                              {user.isBlocked ? "Unblock" : "Block"}
-                            </button>
-                            <div className="border-t border-slate-700 p-2">
-                              <p className="text-xs text-slate-500 mb-2 px-2">Restrict Posting</p>
-                              {restrictionDurations.map((dur) => (
-                                <button
-                                  key={dur.value}
-                                  type="button"
-                                  className="w-full px-4 py-1.5 text-left text-xs text-slate-300 transition hover:bg-slate-800 disabled:opacity-50"
-                                  onClick={() => void updateUser(user._id, { action: "restrict", duration: dur.value }, `Restricted for ${dur.label}`)}
-                                  disabled={isSelf || userBusy}
-                                >
-                                  {dur.label}
-                                </button>
-                              ))}
-                            </div>
-                            {user.postRestrictionUntil && (
-                              <button
-                                type="button"
-                                className="w-full px-4 py-2 text-left text-xs text-slate-300 transition hover:bg-slate-800 disabled:opacity-50 border-t border-slate-700"
-                                onClick={() => void updateUser(user._id, { action: "clearRestriction" }, "Restriction cleared")}
-                                disabled={userBusy}
-                              >
-                                Clear Restriction
-                              </button>
-                            )}
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </article>
+                            {post.isHidden ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                            {post.isHidden ? "Unhide Post" : "Hide Post"}
+                          </button>
 
-        <article className="card-panel">
-          <div className="mb-4 flex items-center gap-2">
-            <FileText className="h-5 w-5 text-amber-300" />
-            <h2 className="font-display text-xl text-slate-100">Recent Posts</h2>
-          </div>
+                          <div className="my-1 h-px bg-slate-800" />
 
-          <div className="hide-scrollbar max-h-[70vh] space-y-3 overflow-y-auto">
-            {data.posts.map((post) => {
-              const postBusy = loadingKey === `post-${post._id}`;
-              return (
-                <div key={post._id} className="rounded-lg border border-slate-700/50 bg-slate-900/50 p-3">
-                  <p className="text-xs text-slate-400">
-                    {post.author ? `${post.author.firstName} ${post.author.lastName}` : "Unknown"}{" "}
-                    <span className="text-slate-500">({formatDate(post.createdAt)})</span>
-                  </p>
-                  <p className="mt-2 text-sm text-slate-300">{previewText(post.content)}</p>
-                  <button
-                    type="button"
-                    className="mt-2 inline-flex items-center gap-1 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-1.5 text-xs text-rose-200 transition hover:bg-rose-500/20 disabled:opacity-60"
-                    disabled={postBusy}
-                    onClick={() => void removePost(post._id)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    Delete
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </article>
-      </section>
-
-      <AnimatePresence>
-        {selectedUserInfo && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm"
-            onClick={() => setSelectedUserInfo(null)}
-          >
-            <motion.article
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="card-panel max-w-md w-full max-h-[80vh] overflow-y-auto"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <h2 className="font-display text-2xl text-slate-100 mb-4">
-                {selectedUserInfo.firstName} {selectedUserInfo.lastName}
-              </h2>
-              <div className="space-y-3 text-sm">
-                <div>
-                  <p className="text-slate-500">Email</p>
-                  <p className="text-slate-100">{selectedUserInfo.email}</p>
-                </div>
-                <div>
-                  <p className="text-slate-500">Role</p>
-                  <p className="text-slate-100 capitalize">{selectedUserInfo.role}</p>
-                </div>
-                <div>
-                  <p className="text-slate-500">Account Status</p>
-                  <p className={selectedUserInfo.isBlocked ? "text-rose-300" : "text-emerald-300"}>{selectedUserInfo.isBlocked ? "Blocked" : "Active"}</p>
-                </div>
-                <div>
-                  <p className="text-slate-500">Joined</p>
-                  <p className="text-slate-100">{formatDate(selectedUserInfo.createdAt)}</p>
-                </div>
-                {selectedUserInfo.blockedAt && (
-                  <div>
-                    <p className="text-slate-500">Blocked At</p>
-                    <p className="text-slate-100">{formatDate(selectedUserInfo.blockedAt)}</p>
-                  </div>
-                )}
-                {selectedUserInfo.postRestrictionUntil && (
-                  <div>
-                    <p className="text-slate-500">Posting Restricted Until</p>
-                    <p className="text-slate-100">{formatDate(selectedUserInfo.postRestrictionUntil)}</p>
-                  </div>
-                )}
-              </div>
-              <button
-                type="button"
-                className="mt-6 w-full rounded-lg border border-slate-700 bg-slate-900 px-4 py-2 text-slate-200 transition hover:bg-slate-800"
-                onClick={() => setSelectedUserInfo(null)}
-              >
-                Close
-              </button>
-            </motion.article>
-          </motion.div>
-        )}
-
-        {selectedUserPosts && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm"
-            onClick={() => setSelectedUserPosts(null)}
-          >
-            <motion.article
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="card-panel max-w-2xl w-full max-h-[80vh] overflow-y-auto"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <h2 className="font-display text-2xl text-slate-100 mb-4">
-                Posts by {selectedUserPosts.firstName} {selectedUserPosts.lastName}
-              </h2>
-              {userPostsLoading ? (
-                <p className="text-slate-400">Loading posts...</p>
-              ) : userPosts.length === 0 ? (
-                <p className="text-slate-400">No posts found</p>
-              ) : (
-                <div className="space-y-3">
-                  {userPosts.map((post) => {
-                    const postBusy = loadingKey === `post-${post._id}`;
-                    return (
-                      <div key={post._id} className="rounded-lg border border-slate-700/50 bg-slate-900/50 p-3">
-                        <div className="flex items-start justify-between gap-2 mb-2">
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs text-slate-500">{formatDate(post.createdAt)}</p>
-                            <span className={`inline-block mt-1 rounded px-2 py-0.5 text-[11px] border ${post.isHidden ? "border-amber-500/50 bg-amber-500/10 text-amber-200" : "border-slate-600 bg-slate-800 text-slate-200"}`}>
-                              {post.isHidden ? "Hidden" : "Visible"}
-                            </span>
-                          </div>
-                          <div className="text-right text-xs text-slate-400">
-                            <p>{post.reactionCount} reactions</p>
-                            <p>{post.commentCount} comments</p>
-                          </div>
+                          <button
+                            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-rose-200 transition hover:bg-rose-900/20 disabled:opacity-50"
+                            type="button"
+                            disabled={isBusy}
+                            onClick={() => void deletePost(post._id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            Delete Post
+                          </button>
                         </div>
-                        <p className="text-sm text-slate-300 line-clamp-3">{previewText(post.content)}</p>
-                        <button
-                          type="button"
-                          className="mt-2 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-1.5 text-xs text-rose-200 transition hover:bg-rose-500/20 disabled:opacity-60"
-                          disabled={postBusy}
-                          onClick={() => void removePost(post._id)}
-                        >
-                          <Trash2 className="inline h-3.5 w-3.5 mr-1" />
-                          Delete Post
-                        </button>
-                      </div>
-                    );
-                  })}
+                      ) : null}
+                    </div>
                 </div>
-              )}
-              <button
-                type="button"
-                className="mt-6 w-full rounded-lg border border-slate-700 bg-slate-900 px-4 py-2 text-slate-200 transition hover:bg-slate-800"
-                onClick={() => setSelectedUserPosts(null)}
-              >
-                Close
-              </button>
-            </motion.article>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+              );
+            })}
+          </div>
+        </section>
+      </div>
+
+    </section>
   );
 }

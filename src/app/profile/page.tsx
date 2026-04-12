@@ -37,7 +37,10 @@ export default async function ProfilePage() {
 
   return (
     <main className="min-h-svh bg-site-gradient pb-8">
-      <TopNav fullName={`${session.user.firstName} ${session.user.lastName}`} isAdmin={session.user.role === "admin"} />
+      <TopNav
+        fullName={`${session.user.firstName} ${session.user.lastName}`}
+        isAdmin={session.user.role === "admin"}
+      />
       <ProfileClient initialUser={user} initialPosts={posts} />
     </main>
   );

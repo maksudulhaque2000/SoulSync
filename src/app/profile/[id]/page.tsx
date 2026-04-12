@@ -87,7 +87,9 @@ export default async function PublicProfilePage({ params }: { params: Promise<{ 
     redirect("/");
   }
 
-  const postsRaw = await Post.find({ author: id, isHidden: { $ne: true } })
+  const postsRaw = await Post.find(
+    session.user.role === "admin" ? { author: id } : { author: id, isHidden: { $ne: true } }
+  )
     .sort({ createdAt: -1 })
     .populate("author", "firstName lastName avatar")
     .populate("comments.user", "firstName lastName avatar")
@@ -108,7 +110,10 @@ export default async function PublicProfilePage({ params }: { params: Promise<{ 
 
   return (
     <main className="min-h-svh bg-site-gradient pb-8">
-      <TopNav fullName={`${session.user.firstName} ${session.user.lastName}`} isAdmin={session.user.role === "admin"} />
+      <TopNav
+        fullName={`${session.user.firstName} ${session.user.lastName}`}
+        isAdmin={session.user.role === "admin"}
+      />
 
       <div className="mx-auto w-full max-w-5xl px-4 py-6">
         <section className="card-panel mb-5">
@@ -159,7 +164,11 @@ export default async function PublicProfilePage({ params }: { params: Promise<{ 
           </div>
         </section>
 
-        <PublicProfilePostsClient initialPosts={posts as PublicPost[]} currentUserId={session.user.id} />
+        <PublicProfilePostsClient
+          initialPosts={posts as PublicPost[]}
+          currentUserId={session.user.id}
+          canModerate={session.user.role === "admin"}
+        />
       </div>
     </main>
   );

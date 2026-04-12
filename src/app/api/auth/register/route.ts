@@ -25,7 +25,7 @@ export async function POST(req: Request) {
     }
 
     await connectDB();
-    await ensureSystemAdminUser();
+  await ensureSystemAdminUser();
 
     const existing = await User.findOne({ email: parsed.data.email.toLowerCase() });
     if (existing) {

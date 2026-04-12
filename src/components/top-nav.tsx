@@ -1,10 +1,9 @@
 "use client";
 
-import { LogOut, ShieldCheck, UserCircle2 } from "lucide-react";
+import { LayoutDashboard, LogOut, MessageCircle, UserCircle2 } from "lucide-react";
 import { signOut } from "next-auth/react";
 import Link from "next/link";
 
-import MessageCounter from "@/components/message-counter";
 import NotificationBell from "@/components/notification-bell";
 
 type NavProps = {
@@ -13,7 +12,6 @@ type NavProps = {
 };
 
 export default function TopNav({ fullName, isAdmin = false }: NavProps) {
-  console.log("[TOP-NAV] Rendering TopNav - isAdmin prop:", isAdmin, "fullName:", fullName);
   return (
     <header className="sticky top-0 z-30 border-b border-slate-800 bg-slate-950/80 backdrop-blur-xl">
       <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-3">
@@ -25,11 +23,14 @@ export default function TopNav({ fullName, isAdmin = false }: NavProps) {
         <nav className="flex items-center gap-2">
           {isAdmin ? (
             <Link href="/admin" className="nav-item">
-              <ShieldCheck className="h-4 w-4" />
-              Admin
+              <LayoutDashboard className="h-4 w-4" />
+              Dashboard
             </Link>
           ) : null}
-          <MessageCounter />
+          <Link href="/messages" className="nav-item">
+            <MessageCircle className="h-4 w-4" />
+            Messages
+          </Link>
           <Link href="/profile" className="nav-item">
             <UserCircle2 className="h-4 w-4" />
             Profile

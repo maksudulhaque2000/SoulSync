@@ -22,13 +22,6 @@ type Message = {
   createdAt: string;
 };
 
-type ConversationData = {
-  userId: string;
-  firstName: string;
-  lastName: string;
-  unreadCount: number;
-};
-
 type Props = {
   currentUserId: string;
   contacts: Contact[];
@@ -40,7 +33,6 @@ export default function MessagesClient({ currentUserId, contacts, initialSelecte
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
   const [recording, setRecording] = useState(false);
-  const [conversations, setConversations] = useState<ConversationData[]>([]);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const audioChunks = useRef<Blob[]>([]);
@@ -49,28 +41,15 @@ export default function MessagesClient({ currentUserId, contacts, initialSelecte
     if (manualSelectedId && contacts.some((contact) => contact._id === manualSelectedId)) {
       return manualSelectedId;
     }
+
     if (initialSelectedId && contacts.some((contact) => contact._id === initialSelectedId)) {
       return initialSelectedId;
     }
+
     return contacts[0]?._id ?? "";
   }, [contacts, initialSelectedId, manualSelectedId]);
 
   const selectedUser = useMemo(() => contacts.find((c) => c._id === selectedId), [contacts, selectedId]);
-
-  const getUnreadCount = (userId: string): number => {
-    return conversations.find((c) => c.userId === userId)?.unreadCount ?? 0;
-  };
-
-  const fetchConversations = async () => {
-    try {
-      const res = await fetch("/api/conversations", { cache: "no-store" });
-      if (!res.ok) return;
-      const data = await res.json();
-      setConversations(data.conversations ?? []);
-    } catch (err) {
-      console.error("[MESSAGES] Fetch conversations error:", err);
-    }
-  };
 
   const loadConversation = async () => {
     if (!selectedId) return;
@@ -78,7 +57,6 @@ export default function MessagesClient({ currentUserId, contacts, initialSelecte
     if (!res.ok) return;
     const data = await res.json();
     setMessages(data.messages ?? []);
-    await fetchConversations();
   };
 
   useEffect(() => {
@@ -108,14 +86,6 @@ export default function MessagesClient({ currentUserId, contacts, initialSelecte
       clearInterval(interval);
     };
   }, [selectedId]);
-
-  useEffect(() => {
-    void fetchConversations();
-    const interval = setInterval(() => {
-      void fetchConversations();
-    }, 10000);
-    return () => clearInterval(interval);
-  }, []);
 
   const sendText = async () => {
     if (!selectedId || !draft.trim()) return;
@@ -202,28 +172,20 @@ export default function MessagesClient({ currentUserId, contacts, initialSelecte
       <aside className="card-panel">
         <h2 className="font-display text-2xl">Conversations</h2>
         <div className="mt-3 space-y-2">
-          {contacts.map((contact) => {
-            const unreadCount = getUnreadCount(contact._id);
-            return (
-              <button
-                key={contact._id}
-                className={`relative w-full rounded-xl border px-3 py-2 text-left transition ${selectedId === contact._id ? "border-cyan-500 bg-cyan-500/10 text-cyan-100" : "border-slate-700 bg-slate-900/50 text-slate-300 hover:bg-slate-800"}`}
-                type="button"
-                onClick={() => setManualSelectedId(contact._id)}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span>
-                    {contact.firstName} {contact.lastName}
-                  </span>
-                  {unreadCount > 0 && (
-                    <span className="inline-flex items-center justify-center rounded-full bg-cyan-500 px-2 py-0.5 text-xs font-bold text-black">
-                      {unreadCount > 99 ? "99+" : unreadCount}
-                    </span>
-                  )}
-                </div>
-              </button>
-            );
-          })}
+          {contacts.map((contact) => (
+            <button
+              key={contact._id}
+              className={`w-full rounded-xl border px-3 py-2 text-left transition ${
+                selectedId === contact._id
+                  ? "border-cyan-500 bg-cyan-500/10 text-cyan-100"
+                  : "border-slate-700 bg-slate-900/50 text-slate-300 hover:bg-slate-800"
+              }`}
+              type="button"
+              onClick={() => setManualSelectedId(contact._id)}
+            >
+              {contact.firstName} {contact.lastName}
+            </button>
+          ))}
         </div>
       </aside>
 

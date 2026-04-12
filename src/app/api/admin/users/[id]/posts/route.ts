@@ -9,21 +9,21 @@ export const runtime = "nodejs";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getAuthSession();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session?.user?.id || session.user.role !== "admin") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   await connectDB();
 
-  const me = await User.findById(session.user.id)
-    .select("role")
+  const { id } = await params;
+
+  const user = await User.findById(id)
+    .select("_id")
     .lean();
 
-  if (!me || me.role !== "admin") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!user) {
+    return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
-
-  const { id } = await params;
 
   const postsRaw = await Post.find({ author: id })
     .select("_id author content createdAt isHidden media reactions comments")
