@@ -6,7 +6,7 @@ import Message from "@/models/Message";
 
 export const runtime = "nodejs";
 
-export async function GET(req: Request) {
+export async function GET(_req: Request) {
   const session = await getAuthSession();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
