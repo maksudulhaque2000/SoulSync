@@ -4,6 +4,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { z } from "zod";
 
 import { connectDB } from "@/lib/db";
+import { ensureSystemAdminUser } from "@/lib/admin";
 import User from "@/models/User";
 
 const credentialsSchema = z.object({
@@ -32,9 +33,14 @@ export const authOptions: AuthOptions = {
         }
 
         await connectDB();
+        await ensureSystemAdminUser();
         const user = await User.findOne({ email: parsed.data.email.toLowerCase() });
 
         if (!user) {
+          return null;
+        }
+
+        if (user.isBlocked) {
           return null;
         }
 
@@ -49,6 +55,9 @@ export const authOptions: AuthOptions = {
           firstName: user.firstName,
           lastName: user.lastName,
           avatar: user.avatar,
+          role: user.role ?? "user",
+          isBlocked: Boolean(user.isBlocked),
+          postRestrictionUntil: user.postRestrictionUntil ? user.postRestrictionUntil.toISOString() : null,
         };
       },
     }),
@@ -61,16 +70,24 @@ export const authOptions: AuthOptions = {
         token.firstName = user.firstName;
         token.lastName = user.lastName;
         token.avatar = user.avatar;
+        token.role = user.role ?? "user";
+        token.isBlocked = user.isBlocked ?? false;
+        token.postRestrictionUntil = user.postRestrictionUntil ?? null;
+        console.log("[JWT] Token set for", user.email, "role:", token.role);
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
-        session.user.id = token.id;
-        session.user.email = token.email;
-        session.user.firstName = token.firstName;
-        session.user.lastName = token.lastName;
-        session.user.avatar = token.avatar;
+        session.user.id = (token.id as string) ?? "";
+        session.user.email = (token.email as string) ?? "";
+        session.user.firstName = (token.firstName as string) ?? "";
+        session.user.lastName = (token.lastName as string) ?? "";
+        session.user.avatar = (token.avatar as string) ?? "";
+        session.user.role = ((token.role as string) ?? "user") as "user" | "admin";
+        session.user.isBlocked = Boolean(token.isBlocked ?? false);
+        session.user.postRestrictionUntil = (token.postRestrictionUntil as string | null) ?? null;
+        console.log("[SESSION] Session callback -", session.user.email, "role:", session.user.role, "isAdmin:", session.user.role === "admin");
       }
       return session;
     },

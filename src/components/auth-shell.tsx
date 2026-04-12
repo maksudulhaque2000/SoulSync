@@ -150,6 +150,9 @@ export default function AuthShell() {
                 <button disabled={loading} className="auth-button" type="submit">
                   {loading ? "Entering..." : "Login"}
                 </button>
+                <div className="rounded-xl border border-cyan-500/35 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-100">
+                  Admin access: admin@gmail.com / Password@123
+                </div>
                 <p className="text-sm text-slate-400">
                   New here?{" "}
                   <button

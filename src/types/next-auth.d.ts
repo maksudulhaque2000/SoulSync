@@ -8,6 +8,9 @@ declare module "next-auth" {
       firstName: string;
       lastName: string;
       avatar?: string;
+      role: "user" | "admin";
+      isBlocked: boolean;
+      postRestrictionUntil?: string | null;
     } & DefaultSession["user"];
   }
 
@@ -17,6 +20,9 @@ declare module "next-auth" {
     firstName: string;
     lastName: string;
     avatar?: string;
+    role: "user" | "admin";
+    isBlocked: boolean;
+    postRestrictionUntil?: string | null;
   }
 }
 
@@ -27,5 +33,8 @@ declare module "next-auth/jwt" {
     firstName: string;
     lastName: string;
     avatar?: string;
+    role: "user" | "admin";
+    isBlocked: boolean;
+    postRestrictionUntil?: string | null;
   }
 }

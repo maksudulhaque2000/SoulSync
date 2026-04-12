@@ -4,6 +4,7 @@ import { z } from "zod";
 import { getAuthSession } from "@/lib/auth";
 import { connectDB } from "@/lib/db";
 import Post from "@/models/Post";
+import User from "@/models/User";
 
 export const runtime = "nodejs";
 const mediaSchema = z.object({
@@ -94,12 +95,20 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const { id } = await params;
   await connectDB();
 
+  const me = await User.findById(session.user.id)
+    .select("role")
+    .lean();
+
+  if (!me) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const post = await Post.findById(id);
   if (!post) {
     return NextResponse.json({ error: "Post not found" }, { status: 404 });
   }
 
-  if (post.author.toString() !== session.user.id) {
+  if (post.author.toString() !== session.user.id && me.role !== "admin") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

@@ -1,0 +1,19 @@
+
+const restrictionDurations = [
+  { label: "24 hours", value: "24h" },
+  { label: "3 days", value: "3d" },
+  { label: "7 days", value: "7d" },
+  { label: "30 days", value: "30d" },
+];
+
+function formatDate(timestamp: string | undefined | null): string {
+  if (!timestamp) return "Never";
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return "Invalid date";
+  return date.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+}
+
+function previewText(text: string): string {
+  if (text.length <= 150) return text;
+  return text.slice(0, 150) + "...";
+}

@@ -358,7 +358,8 @@ export default function FeedClient({ initialPosts, suggestedUsers, incomingReque
       });
 
       if (!res.ok) {
-        toast.error("Post publish failed");
+        const payload = await res.json().catch(() => ({}));
+        toast.error(payload.error ?? "Post publish failed");
         return;
       }
 

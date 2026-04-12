@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { ensureSystemAdminUser } from "@/lib/admin";
 import { connectDB } from "@/lib/db";
 import User from "@/models/User";
 
@@ -24,6 +25,7 @@ export async function POST(req: Request) {
     }
 
     await connectDB();
+    await ensureSystemAdminUser();
 
     const existing = await User.findOne({ email: parsed.data.email.toLowerCase() });
     if (existing) {

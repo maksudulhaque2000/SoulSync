@@ -4,7 +4,6 @@ import { z } from "zod";
 import { getAuthSession } from "@/lib/auth";
 import { connectDB } from "@/lib/db";
 import Message from "@/models/Message";
-import Notification from "@/models/Notification";
 
 export const runtime = "nodejs";
 
@@ -70,14 +69,6 @@ export async function POST(req: Request) {
     to: parsed.data.to,
     text: parsed.data.text,
     voiceUrl: parsed.data.voiceUrl,
-  });
-
-  await Notification.create({
-    user: parsed.data.to,
-    type: "message",
-    title: "New message",
-    body: `${session.user.firstName} sent you a message.`,
-    link: "/messages",
   });
 
   return NextResponse.json({ message }, { status: 201 });

@@ -5,6 +5,7 @@ import { getAuthSession } from "@/lib/auth";
 import { connectDB } from "@/lib/db";
 import Notification from "@/models/Notification";
 import Post from "@/models/Post";
+import User from "@/models/User";
 
 export const runtime = "nodejs";
 const createPostSchema = z.object({
@@ -59,6 +60,29 @@ export async function POST(req: Request) {
   }
 
   await connectDB();
+
+  const me = await User.findById(session.user.id)
+    .select("isBlocked postRestrictionUntil")
+    .lean();
+
+  if (!me) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (me.isBlocked) {
+    return NextResponse.json({ error: "Your account is blocked" }, { status: 403 });
+  }
+
+  const restrictionUntil = me.postRestrictionUntil ? new Date(me.postRestrictionUntil) : null;
+  if (restrictionUntil && restrictionUntil.getTime() > Date.now()) {
+    return NextResponse.json(
+      {
+        error: "Posting is temporarily restricted",
+        restrictionUntil: restrictionUntil.toISOString(),
+      },
+      { status: 403 }
+    );
+  }
 
   const post = await Post.create({
     author: session.user.id,
