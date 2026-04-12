@@ -14,6 +14,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type ChangeEvent, useCallback, useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 
+import { FancyDialog } from "@/components/fancy-dialog";
 import { playActionSound } from "@/components/sound";
 
 type Media = {
@@ -141,6 +142,7 @@ export default function FeedClient({ initialPosts, suggestedUsers, incomingReque
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const [workingPostId, setWorkingPostId] = useState<string | null>(null);
+  const [pendingDeletePostId, setPendingDeletePostId] = useState<string | null>(null);
   const [textBackgroundColor, setTextBackgroundColor] = useState("#1e293b");
   const [textAlign, setTextAlign] = useState<"left" | "center" | "right">("left");
 
@@ -608,9 +610,6 @@ export default function FeedClient({ initialPosts, suggestedUsers, incomingReque
   };
 
   const deletePost = async (postId: string) => {
-    const confirmed = window.confirm("Delete this post permanently?");
-    if (!confirmed) return;
-
     setWorkingPostId(postId);
     setOpenManagePostId(null);
     try {
@@ -757,7 +756,7 @@ export default function FeedClient({ initialPosts, suggestedUsers, incomingReque
                             </button>
                             <button
                               type="button"
-                              onClick={() => void deletePost(post._id)}
+                              onClick={() => setPendingDeletePostId(post._id)}
                               className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-rose-200 transition hover:bg-rose-500/15"
                               disabled={workingPostId === post._id}
                             >
@@ -1499,6 +1498,29 @@ export default function FeedClient({ initialPosts, suggestedUsers, incomingReque
           </motion.div>
         ) : null}
       </AnimatePresence>
+
+      <FancyDialog
+        open={Boolean(pendingDeletePostId)}
+        onClose={() => setPendingDeletePostId(null)}
+        title="Delete Post"
+        description="This action permanently removes the post from your timeline and feed."
+        actions={[
+          {
+            label: "Cancel",
+            onClick: () => setPendingDeletePostId(null),
+          },
+          {
+            label: "Delete Permanently",
+            variant: "danger",
+            disabled: Boolean(pendingDeletePostId && workingPostId === pendingDeletePostId),
+            onClick: async () => {
+              if (!pendingDeletePostId) return;
+              await deletePost(pendingDeletePostId);
+              setPendingDeletePostId(null);
+            },
+          },
+        ]}
+      />
     </div>
   );
 }

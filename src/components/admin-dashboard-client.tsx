@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 
+import { FancyDialog } from "@/components/fancy-dialog";
+
 type AdminStats = {
   totalUsers: number;
   totalPosts: number;
@@ -62,6 +64,16 @@ type OverviewPayload = {
   posts: AdminPost[];
 };
 
+type PendingDeleteUser = {
+  id: string;
+  name: string;
+};
+
+type PendingDeletePost = {
+  id: string;
+  authorName: string;
+};
+
 function htmlToText(html: string | undefined) {
   if (!html) return "";
   return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
@@ -98,6 +110,13 @@ export default function AdminDashboardClient({ currentUserId }: { currentUserId:
   });
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [posts, setPosts] = useState<AdminPost[]>([]);
+  const [blockDialogUser, setBlockDialogUser] = useState<AdminUser | null>(null);
+  const [blockReason, setBlockReason] = useState("Blocked by admin");
+  const [restrictionDialogUser, setRestrictionDialogUser] = useState<AdminUser | null>(null);
+  const [restrictionDuration, setRestrictionDuration] = useState("24h");
+  const [restrictionReason, setRestrictionReason] = useState("Posting restricted by admin");
+  const [pendingDeleteUser, setPendingDeleteUser] = useState<PendingDeleteUser | null>(null);
+  const [pendingDeletePost, setPendingDeletePost] = useState<PendingDeletePost | null>(null);
 
   const loadOverview = async (showRefreshState = false) => {
     if (showRefreshState) {
@@ -268,25 +287,16 @@ export default function AdminDashboardClient({ currentUserId }: { currentUserId:
       return;
     }
 
-    const reason = window.prompt("Block reason লিখুন (optional):", "Blocked by admin") ?? "Blocked by admin";
-    await updateUserAction(user._id, { action: "block", reason }, "User blocked");
+    setOpenUserMenuId(null);
+    setBlockDialogUser(user);
+    setBlockReason("Blocked by admin");
   };
 
   const applyRestriction = async (user: AdminUser) => {
-    const duration = window.prompt("Restriction duration দিন (24h / 3d / 7d / 30d)", "24h");
-    if (!duration) return;
-
-    if (!["24h", "3d", "7d", "30d"].includes(duration)) {
-      toast.error("Invalid duration");
-      return;
-    }
-
-    const reason = window.prompt("Restriction reason লিখুন (optional):", "Posting restricted by admin") ?? "Posting restricted by admin";
-    await updateUserAction(
-      user._id,
-      { action: "restrict", duration, reason },
-      "Posting restriction applied"
-    );
+    setOpenUserMenuId(null);
+    setRestrictionDialogUser(user);
+    setRestrictionDuration("24h");
+    setRestrictionReason("Posting restricted by admin");
   };
 
   const clearRestriction = async (userId: string) => {
@@ -294,9 +304,6 @@ export default function AdminDashboardClient({ currentUserId }: { currentUserId:
   };
 
   const deleteUser = async (userId: string) => {
-    const confirmed = window.confirm("এই ইউজার এবং তার ডেটা delete করতে চান?");
-    if (!confirmed) return;
-
     setWorkingUserId(userId);
     try {
       const res = await fetch(`/api/admin/users/${userId}`, { method: "DELETE" });
@@ -353,9 +360,6 @@ export default function AdminDashboardClient({ currentUserId }: { currentUserId:
   };
 
   const deletePost = async (postId: string) => {
-    const confirmed = window.confirm("এই পোস্ট delete করতে চান?");
-    if (!confirmed) return;
-
     setWorkingPostId(postId);
     try {
       const res = await fetch(`/api/admin/posts/${postId}`, { method: "DELETE" });
@@ -570,7 +574,13 @@ export default function AdminDashboardClient({ currentUserId }: { currentUserId:
                               className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-rose-200 transition hover:bg-rose-900/20 disabled:opacity-50"
                               type="button"
                               disabled={isBusy || isSelf}
-                              onClick={() => void deleteUser(user._id)}
+                              onClick={() => {
+                                setOpenUserMenuId(null);
+                                setPendingDeleteUser({
+                                  id: user._id,
+                                  name: `${user.firstName} ${user.lastName}`.trim(),
+                                });
+                              }}
                             >
                               <Trash2 className="h-4 w-4" />
                               Delete User
@@ -666,7 +676,13 @@ export default function AdminDashboardClient({ currentUserId }: { currentUserId:
                             className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-rose-200 transition hover:bg-rose-900/20 disabled:opacity-50"
                             type="button"
                             disabled={isBusy}
-                            onClick={() => void deletePost(post._id)}
+                            onClick={() => {
+                              setOpenPostMenuId(null);
+                              setPendingDeletePost({
+                                id: post._id,
+                                authorName: `${post.author?.firstName ?? "Unknown"} ${post.author?.lastName ?? "User"}`.trim(),
+                              });
+                            }}
                           >
                             <Trash2 className="h-4 w-4" />
                             Delete Post
@@ -680,6 +696,146 @@ export default function AdminDashboardClient({ currentUserId }: { currentUserId:
           </div>
         </section>
       </div>
+
+      <FancyDialog
+        open={Boolean(blockDialogUser)}
+        onClose={() => setBlockDialogUser(null)}
+        title="Block User"
+        description={blockDialogUser ? `Set an optional reason before blocking ${blockDialogUser.firstName} ${blockDialogUser.lastName}.` : ""}
+        actions={[
+          {
+            label: "Cancel",
+            onClick: () => setBlockDialogUser(null),
+          },
+          {
+            label: "Block User",
+            variant: "danger",
+            disabled: Boolean(blockDialogUser && workingUserId === blockDialogUser._id),
+            onClick: async () => {
+              if (!blockDialogUser) return;
+              await updateUserAction(
+                blockDialogUser._id,
+                { action: "block", reason: blockReason.trim() || "Blocked by admin" },
+                "User blocked"
+              );
+              setBlockDialogUser(null);
+            },
+          },
+        ]}
+      >
+        <label className="text-sm text-slate-300">
+          Block reason
+          <textarea
+            rows={3}
+            value={blockReason}
+            onChange={(event) => setBlockReason(event.target.value)}
+            className="mt-2 w-full rounded-xl border border-slate-700/80 bg-slate-900/70 px-4 py-3 text-slate-100 placeholder:text-slate-500 outline-none transition focus:border-cyan-500"
+            placeholder="Blocked by admin"
+          />
+        </label>
+      </FancyDialog>
+
+      <FancyDialog
+        open={Boolean(restrictionDialogUser)}
+        onClose={() => setRestrictionDialogUser(null)}
+        title="Restrict Posting"
+        description={restrictionDialogUser ? `Apply posting restriction to ${restrictionDialogUser.firstName} ${restrictionDialogUser.lastName}.` : ""}
+        actions={[
+          {
+            label: "Cancel",
+            onClick: () => setRestrictionDialogUser(null),
+          },
+          {
+            label: "Apply Restriction",
+            variant: "primary",
+            disabled: Boolean(restrictionDialogUser && workingUserId === restrictionDialogUser._id),
+            onClick: async () => {
+              if (!restrictionDialogUser) return;
+              await updateUserAction(
+                restrictionDialogUser._id,
+                {
+                  action: "restrict",
+                  duration: restrictionDuration,
+                  reason: restrictionReason.trim() || "Posting restricted by admin",
+                },
+                "Posting restriction applied"
+              );
+              setRestrictionDialogUser(null);
+            },
+          },
+        ]}
+      >
+        <label className="text-sm text-slate-300">
+          Duration
+          <select
+            value={restrictionDuration}
+            onChange={(event) => setRestrictionDuration(event.target.value)}
+            className="mt-2 w-full rounded-xl border border-slate-700/80 bg-slate-900/70 px-4 py-3 text-slate-100 outline-none transition focus:border-cyan-500"
+          >
+            <option value="24h">24 hours</option>
+            <option value="3d">3 days</option>
+            <option value="7d">7 days</option>
+            <option value="30d">30 days</option>
+          </select>
+        </label>
+
+        <label className="mt-3 block text-sm text-slate-300">
+          Restriction reason
+          <textarea
+            rows={3}
+            value={restrictionReason}
+            onChange={(event) => setRestrictionReason(event.target.value)}
+            className="mt-2 w-full rounded-xl border border-slate-700/80 bg-slate-900/70 px-4 py-3 text-slate-100 placeholder:text-slate-500 outline-none transition focus:border-cyan-500"
+            placeholder="Posting restricted by admin"
+          />
+        </label>
+      </FancyDialog>
+
+      <FancyDialog
+        open={Boolean(pendingDeleteUser)}
+        onClose={() => setPendingDeleteUser(null)}
+        title="Delete User"
+        description={pendingDeleteUser ? `${pendingDeleteUser.name} and related data will be deleted permanently.` : ""}
+        actions={[
+          {
+            label: "Cancel",
+            onClick: () => setPendingDeleteUser(null),
+          },
+          {
+            label: "Delete Permanently",
+            variant: "danger",
+            disabled: Boolean(pendingDeleteUser && workingUserId === pendingDeleteUser.id),
+            onClick: async () => {
+              if (!pendingDeleteUser) return;
+              await deleteUser(pendingDeleteUser.id);
+              setPendingDeleteUser(null);
+            },
+          },
+        ]}
+      />
+
+      <FancyDialog
+        open={Boolean(pendingDeletePost)}
+        onClose={() => setPendingDeletePost(null)}
+        title="Delete Post"
+        description={pendingDeletePost ? `Delete selected post by ${pendingDeletePost.authorName}? This cannot be undone.` : ""}
+        actions={[
+          {
+            label: "Cancel",
+            onClick: () => setPendingDeletePost(null),
+          },
+          {
+            label: "Delete Permanently",
+            variant: "danger",
+            disabled: Boolean(pendingDeletePost && workingPostId === pendingDeletePost.id),
+            onClick: async () => {
+              if (!pendingDeletePost) return;
+              await deletePost(pendingDeletePost.id);
+              setPendingDeletePost(null);
+            },
+          },
+        ]}
+      />
 
     </section>
   );

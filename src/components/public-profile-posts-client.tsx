@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 
+import { FancyDialog } from "@/components/fancy-dialog";
 import { playActionSound } from "@/components/sound";
 
 type PublicMedia = {
@@ -89,6 +90,7 @@ export default function PublicProfilePostsClient({ initialPosts, currentUserId, 
   const [openSharePostId, setOpenSharePostId] = useState<string | null>(null);
   const [openManagePostId, setOpenManagePostId] = useState<string | null>(null);
   const [workingPostId, setWorkingPostId] = useState<string | null>(null);
+  const [pendingDeletePostId, setPendingDeletePostId] = useState<string | null>(null);
 
   useEffect(() => {
     setPosts(initialPosts);
@@ -229,8 +231,6 @@ export default function PublicProfilePostsClient({ initialPosts, currentUserId, 
   };
 
   const deletePost = async (postId: string) => {
-    if (!window.confirm("এই পোস্ট delete করতে চান?")) return;
-
     setWorkingPostId(postId);
     try {
       const res = await fetch(`/api/admin/posts/${postId}`, { method: "DELETE" });
@@ -303,7 +303,7 @@ export default function PublicProfilePostsClient({ initialPosts, currentUserId, 
                           className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-rose-200 transition hover:bg-rose-900/20 disabled:opacity-50"
                           type="button"
                           disabled={workingPostId === post._id}
-                          onClick={() => void deletePost(post._id)}
+                          onClick={() => setPendingDeletePostId(post._id)}
                         >
                           <Trash2 className="h-4 w-4" />
                           Delete Post
@@ -522,6 +522,29 @@ export default function PublicProfilePostsClient({ initialPosts, currentUserId, 
           </div>
         </div>
       ) : null}
+
+      <FancyDialog
+        open={Boolean(pendingDeletePostId)}
+        onClose={() => setPendingDeletePostId(null)}
+        title="Delete Post"
+        description="This action permanently removes the selected post."
+        actions={[
+          {
+            label: "Cancel",
+            onClick: () => setPendingDeletePostId(null),
+          },
+          {
+            label: "Delete Permanently",
+            variant: "danger",
+            disabled: Boolean(pendingDeletePostId && workingPostId === pendingDeletePostId),
+            onClick: async () => {
+              if (!pendingDeletePostId) return;
+              await deletePost(pendingDeletePostId);
+              setPendingDeletePostId(null);
+            },
+          },
+        ]}
+      />
     </section>
   );
 }

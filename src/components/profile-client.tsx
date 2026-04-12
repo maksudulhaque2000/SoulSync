@@ -8,6 +8,7 @@ import { useSearchParams } from "next/navigation";
 import { type ChangeEvent, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
 
+import { FancyDialog } from "@/components/fancy-dialog";
 import { playActionSound } from "@/components/sound";
 
 type PendingRequester = {
@@ -184,6 +185,8 @@ export default function ProfileClient({ initialUser, initialPosts }: Props) {
   const [editMedia, setEditMedia] = useState<Media[]>([]);
   const [editBackgroundColor, setEditBackgroundColor] = useState("#1e293b");
   const [editTextAlign, setEditTextAlign] = useState<"left" | "center" | "right">("left");
+  const [pendingDeletePostId, setPendingDeletePostId] = useState<string | null>(null);
+  const [pendingBlockUserId, setPendingBlockUserId] = useState<string | null>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const searchParams = useSearchParams();
   const focusedRequesterId = searchParams.get("requesterId");
@@ -320,9 +323,6 @@ export default function ProfileClient({ initialUser, initialPosts }: Props) {
   };
 
   const deletePost = async (postId: string) => {
-    const confirmed = window.confirm("Delete this post permanently?");
-    if (!confirmed) return;
-
     setWorkingPostId(postId);
     try {
       const res = await fetch(`/api/posts/${postId}`, { method: "DELETE" });
@@ -471,9 +471,6 @@ export default function ProfileClient({ initialUser, initialPosts }: Props) {
   };
 
   const blockUser = async (targetUserId: string) => {
-    const confirmed = window.confirm("Block this user? This will also remove connection and requests.");
-    if (!confirmed) return;
-
     const res = await fetch("/api/connection/block", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -581,7 +578,7 @@ export default function ProfileClient({ initialUser, initialPosts }: Props) {
                       <button
                         type="button"
                         className="icon-btn border-rose-500/50 text-rose-200 hover:bg-rose-950/40"
-                        onClick={() => void deletePost(post._id)}
+                        onClick={() => setPendingDeletePostId(post._id)}
                         disabled={isBusy}
                       >
                         <Trash2 className="h-4 w-4" />
@@ -785,7 +782,7 @@ export default function ProfileClient({ initialUser, initialPosts }: Props) {
                       <button
                         className="inline-flex items-center gap-1 rounded-lg border border-rose-500/50 px-2.5 py-1 text-xs text-rose-200 hover:bg-rose-700/15"
                         type="button"
-                        onClick={() => blockUser(parsed.id)}
+                        onClick={() => setPendingBlockUserId(parsed.id)}
                       >
                         <Ban className="h-3.5 w-3.5" />
                         Block
@@ -1004,6 +1001,51 @@ export default function ProfileClient({ initialUser, initialPosts }: Props) {
           </div>
         </div>
       ) : null}
+
+      <FancyDialog
+        open={Boolean(pendingDeletePostId)}
+        onClose={() => setPendingDeletePostId(null)}
+        title="Delete Post"
+        description="This post will be removed permanently from your profile and feed."
+        actions={[
+          {
+            label: "Cancel",
+            onClick: () => setPendingDeletePostId(null),
+          },
+          {
+            label: "Delete Permanently",
+            variant: "danger",
+            disabled: Boolean(pendingDeletePostId && workingPostId === pendingDeletePostId),
+            onClick: async () => {
+              if (!pendingDeletePostId) return;
+              await deletePost(pendingDeletePostId);
+              setPendingDeletePostId(null);
+            },
+          },
+        ]}
+      />
+
+      <FancyDialog
+        open={Boolean(pendingBlockUserId)}
+        onClose={() => setPendingBlockUserId(null)}
+        title="Block User"
+        description="This user will be blocked and any existing connection or requests will be removed."
+        actions={[
+          {
+            label: "Cancel",
+            onClick: () => setPendingBlockUserId(null),
+          },
+          {
+            label: "Block User",
+            variant: "danger",
+            onClick: async () => {
+              if (!pendingBlockUserId) return;
+              await blockUser(pendingBlockUserId);
+              setPendingBlockUserId(null);
+            },
+          },
+        ]}
+      />
     </div>
   );
 }
