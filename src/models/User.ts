@@ -4,6 +4,8 @@ const userSchema = new Schema(
   {
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     password: { type: String, required: true },
+    passwordResetToken: { type: String, default: null, select: false },
+    passwordResetExpiresAt: { type: Date, default: null, select: false },
     firstName: { type: String, required: true, trim: true },
     lastName: { type: String, required: true, trim: true },
     avatar: { type: String, default: "" },

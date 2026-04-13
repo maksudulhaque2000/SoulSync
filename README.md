@@ -158,6 +158,8 @@ Includes identity and profile fields, social graph fields, and moderation fields
 ### Auth
 
 - POST /api/auth/register
+- POST /api/auth/forgot-password
+- POST /api/auth/reset-password
 - NextAuth handler at /api/auth/[...nextauth]
 
 ### Admin
@@ -206,12 +208,18 @@ MONGODB_URI=your_mongodb_connection_string
 NEXTAUTH_SECRET=your_nextauth_secret
 NEXTAUTH_URL=http://localhost:3000
 BLOB_READ_WRITE_TOKEN=your_vercel_blob_token
+SMTP_HOST=your_smtp_host
+SMTP_PORT=587
+SMTP_USER=your_smtp_username
+SMTP_PASS=your_smtp_password
+SMTP_FROM="SoulSync <no-reply@yoursite.com>"
 ```
 
 Notes:
 
 - BLOB_READ_WRITE_TOKEN is required for uploads on Vercel.
 - NEXTAUTH_URL should match your deployed domain in production.
+- SMTP variables are required to deliver password reset emails.
 
 ## Local Development
 

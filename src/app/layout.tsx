@@ -17,6 +17,11 @@ const cinzel = Cinzel({
 export const metadata: Metadata = {
   title: "SoulSync",
   description: "Deep expressive social blogging platform",
+  icons: {
+    icon: "/favicon.svg",
+    shortcut: "/favicon.svg",
+    apple: "/favicon.svg",
+  },
 };
 
 export default function RootLayout({

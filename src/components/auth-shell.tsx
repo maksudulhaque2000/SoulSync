@@ -1,6 +1,8 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { Eye, EyeOff } from "lucide-react";
+import Link from "next/link";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -19,6 +21,7 @@ type RegisterForm = {
   lastName: string;
   email: string;
   password: string;
+  confirmPassword: string;
 };
 
 const authMessages = {
@@ -40,13 +43,16 @@ export default function AuthShell() {
   const router = useRouter();
   const [isRegister, setIsRegister] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [showRegisterPassword, setShowRegisterPassword] = useState(false);
+  const [showRegisterConfirmPassword, setShowRegisterConfirmPassword] = useState(false);
 
   const loginForm = useForm<LoginForm>({
     defaultValues: { email: "", password: "" },
   });
 
   const registerForm = useForm<RegisterForm>({
-    defaultValues: { firstName: "", lastName: "", email: "", password: "" },
+    defaultValues: { firstName: "", lastName: "", email: "", password: "", confirmPassword: "" },
   });
 
   const handleLogin = loginForm.handleSubmit(async (values) => {
@@ -70,11 +76,21 @@ export default function AuthShell() {
   });
 
   const handleRegister = registerForm.handleSubmit(async (values) => {
+    if (values.password !== values.confirmPassword) {
+      toast.error("Password and confirm password must match.");
+      return;
+    }
+
     setLoading(true);
     const create = await fetch("/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(values),
+      body: JSON.stringify({
+        firstName: values.firstName,
+        lastName: values.lastName,
+        email: values.email,
+        password: values.password,
+      }),
     });
 
     if (!create.ok) {
@@ -141,12 +157,27 @@ export default function AuthShell() {
                   placeholder="Email"
                   className="auth-input"
                 />
-                <input
-                  {...loginForm.register("password", { required: true })}
-                  type="password"
-                  placeholder="Password"
-                  className="auth-input"
-                />
+                <div className="relative">
+                  <input
+                    {...loginForm.register("password", { required: true })}
+                    type={showLoginPassword ? "text" : "password"}
+                    placeholder="Password"
+                    className="auth-input pr-12"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowLoginPassword((prev) => !prev)}
+                    aria-label={showLoginPassword ? "Hide password" : "Show password"}
+                    className="absolute inset-y-0 right-0 inline-flex w-11 items-center justify-center text-slate-400 transition hover:text-cyan-300"
+                  >
+                    {showLoginPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+                <p className="text-right text-sm text-slate-400">
+                  <Link href="/forgot-password" className="font-medium text-cyan-300 hover:text-cyan-200">
+                    Forgot password?
+                  </Link>
+                </p>
                 <button disabled={loading} className="auth-button" type="submit">
                   {loading ? "Entering..." : "Login"}
                 </button>
@@ -184,12 +215,38 @@ export default function AuthShell() {
                   placeholder="Email"
                   className="auth-input"
                 />
-                <input
-                  {...registerForm.register("password", { required: true, minLength: 6 })}
-                  type="password"
-                  placeholder="Password"
-                  className="auth-input"
-                />
+                <div className="relative">
+                  <input
+                    {...registerForm.register("password", { required: true, minLength: 6 })}
+                    type={showRegisterPassword ? "text" : "password"}
+                    placeholder="Password"
+                    className="auth-input pr-12"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowRegisterPassword((prev) => !prev)}
+                    aria-label={showRegisterPassword ? "Hide password" : "Show password"}
+                    className="absolute inset-y-0 right-0 inline-flex w-11 items-center justify-center text-slate-400 transition hover:text-cyan-300"
+                  >
+                    {showRegisterPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+                <div className="relative">
+                  <input
+                    {...registerForm.register("confirmPassword", { required: true, minLength: 6 })}
+                    type={showRegisterConfirmPassword ? "text" : "password"}
+                    placeholder="Confirm password"
+                    className="auth-input pr-12"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowRegisterConfirmPassword((prev) => !prev)}
+                    aria-label={showRegisterConfirmPassword ? "Hide confirm password" : "Show confirm password"}
+                    className="absolute inset-y-0 right-0 inline-flex w-11 items-center justify-center text-slate-400 transition hover:text-cyan-300"
+                  >
+                    {showRegisterConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
                 <button disabled={loading} className="auth-button" type="submit">
                   {loading ? "Creating..." : "Register"}
                 </button>
